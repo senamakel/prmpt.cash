@@ -28,14 +28,13 @@ import {
   PLUGIN_DIR,
   TEST_CODE,
   TEST_TOKEN,
-  exec,
+  execTool,
   hostConfigPath,
   install,
   ourEntries,
   readJSON,
   runRecorded,
   sandbox,
-  shellPath,
   smokeEnv,
 } from './lib.mjs';
 
@@ -47,7 +46,7 @@ const TURN =
 /** Resolve an agent CLI's version, or null if it is not installed here. */
 async function version(bin) {
   try {
-    const res = await exec(bin, ['--version'], { env: process.env, timeout: 60_000 });
+    const res = await execTool(bin, ['--version'], { env: process.env, timeout: 60_000 });
     return res.code === 0 ? res.stdout.trim() : null;
   } catch {
     return null;
@@ -92,13 +91,13 @@ test('Claude Code accepts the plugin manifest', { skip: !CLAUDE && 'claude not i
   // --strict fails on unrecognised fields and missing metadata, which the
   // runtime tolerates silently. A manifest that only "mostly" validates is how
   // a plugin ends up installed and inert.
-  const res = await exec('claude', ['plugin', 'validate', '--strict', shellPath(PLUGIN_DIR)], {
+  const res = await execTool('claude', ['plugin', 'validate', '--strict', PLUGIN_DIR], {
     env: process.env,
   });
   assert.equal(res.code, 0, `claude plugin validate --strict failed:\n${res.stdout}\n${res.stderr}`);
 });
 
-test('the plugin manifest and the installer agree on the hook', { skip: !CLAUDE && 'claude not installed' }, async () => {
+test('the plugin manifest and the installer agree on the hook', () => {
   // The manifest route (claude plugin install) and the installer route both
   // have to end at the same event with the same timeout. They are written in
   // two different files and have drifted before.
@@ -144,7 +143,10 @@ test('Claude Code reads the settings file we wrote without complaining', { skip:
   // directory without a trust prompt, which is the only way to get Claude Code
   // to parse our file without credentials. It exits 0 on warnings, so the
   // assertion is on what it says, not on the code.
-  const res = await exec('claude', ['doctor'], { env: { ...process.env, HOME: box.home }, cwd: project });
+  const res = await execTool('claude', ['doctor'], {
+    env: { ...process.env, HOME: box.home, USERPROFILE: box.home },
+    cwd: project,
+  });
   const output = `${res.stdout}\n${res.stderr}`;
   assert.ok(
     !/(invalid|malformed|failed to parse|could not parse).{0,40}settings/i.test(output),

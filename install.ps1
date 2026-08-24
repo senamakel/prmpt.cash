@@ -59,8 +59,16 @@ function Die        { param($m) Write-Host "error: $m" -ForegroundColor Red; exi
 # ---------------------------------------------------------------- prerequisites
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Die 'Node.js 18+ is required and was not found on PATH.' }
-$major = [int](& node -p 'process.versions.node.split(".")[0]')
-if ($major -lt 18) { Die "Node 18+ required, found $(& node -v)." }
+# Parsed from `node -v` rather than `node -p '...split(".")...'`. PowerShell does
+# not escape quotes that are INSIDE an argument to a native command, so that
+# one-liner reached node as `process.versions.node.split(.)[0]` and threw a
+# SyntaxError -- which this script then reported as "Node 18+ required, found
+# v20". Every Windows install failed at the version check, on every version of
+# Node. Nothing here may pass a quote through to a native command.
+$nodeVersion = (& node -v)
+if ($nodeVersion -notmatch '^v(\d+)\.') { Die "could not read a version from ``node -v`` ($nodeVersion)." }
+$major = [int]$Matches[1]
+if ($major -lt 18) { Die "Node 18+ required, found $nodeVersion." }
 $NodeBin = $node.Source
 
 # Where each agent keeps its config. Windows uses the same dotted directories
@@ -131,14 +139,23 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 
 function Invoke-NodeScript {
   param([string] $Script, [string[]] $Arguments)
-  # -e with the program on argv, so nothing is quoted through cmd.exe.
+  # The program goes through a temp FILE, not through `-e`. PowerShell leaves
+  # the double quotes inside an argument unescaped when it hands it to a native
+  # program, so `-e $MergeJs` arrived at node with every `"utf8"` collapsed to
+  # `utf8`. Passing a path instead means nothing but paths crosses the boundary.
   #
   # Out-Host, not a bare call: in PowerShell any uncaptured output from a
   # function becomes part of its RETURN VALUE, so node printing a line would
   # make this return an array instead of the exit code, and every `-eq 0`
   # check below would silently stop meaning what it says.
-  & $NodeBin -e $Script @Arguments | Out-Host
-  return $LASTEXITCODE
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("prmpt-" + [guid]::NewGuid() + ".js")
+  try {
+    [System.IO.File]::WriteAllText($tmp, $Script)
+    & $NodeBin $tmp @Arguments | Out-Host
+    return $LASTEXITCODE
+  } finally {
+    Remove-Item -Force -ErrorAction SilentlyContinue $tmp
+  }
 }
 
 # ------------------------------------------------------------------- uninstall

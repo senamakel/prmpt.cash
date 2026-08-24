@@ -110,9 +110,9 @@ export function smokeEnv(home, extra = {}) {
 }
 
 /** Spawn anything and collect exit code and both streams. */
-export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 180_000 } = {}) {
+export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 180_000, shell = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], timeout });
+    const child = spawn(command, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], timeout, shell });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -150,11 +150,31 @@ export function install(box, args = [], { env = {}, cwd = PLUGIN_DIR } = {}) {
  *
  * This is the assertion the rest of the suite exists for. A hook whose recorded
  * path is an MSYS path, or is missing a quote, fails here and nowhere else.
+ *
+ * `shell: true` rather than spawning cmd.exe with the command as an argv entry.
+ * Node escapes argv for cmd unless told the arguments are verbatim, so
+ * `node "C:/a b/hook.mjs"` reached node as `node \"C:/a b/hook.mjs\"` and node
+ * tried to open a file whose name included the quote characters. That looked
+ * exactly like an installer bug and was not one.
  */
 export function runRecorded(command, { env, stdin = '' } = {}) {
-  return IS_WINDOWS
-    ? exec(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], { env, stdin })
-    : exec('/bin/sh', ['-c', command], { env, stdin });
+  return exec(command, undefined, { env, stdin, shell: true });
+}
+
+/**
+ * Run an agent CLI by name.
+ *
+ * On Windows an npm global is a `.cmd` shim, which CreateProcess cannot
+ * execute -- `spawn('claude', ...)` fails with ENOENT even though the agent is
+ * installed and first on PATH. That made every agent look absent, which turned
+ * this suite's skips into a green Windows build that had tested nothing. The
+ * shell resolves the shim, so Windows goes through it, quoting each argument on
+ * the way, because a shell command line is one string and paths have spaces.
+ */
+export function execTool(bin, args = [], opts = {}) {
+  if (!IS_WINDOWS) return exec(bin, args, opts);
+  const quoted = args.map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a));
+  return exec([bin, ...quoted].join(' '), undefined, { ...opts, shell: true });
 }
 
 /**
