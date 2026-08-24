@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assistantEntry,
   baseEnv,
@@ -29,7 +29,7 @@ async function hit(over = {}, { payload, env = {} } = {}) {
   try {
     const res = await runHook({
       stdin: JSON.stringify(payload ?? { hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-      env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url, ...env }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url, ...env }),
     });
     assertNoKeyLeak(res, 'decision');
     return { res, server, input: servedInput(server) };
@@ -97,7 +97,7 @@ test('a missing clickUrl falls back to a URL derived from the endpoint', async (
   try {
     const res = await runHook({
       stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-      env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     const { systemMessage } = JSON.parse(res.stdout.trim());
     assert.ok(systemMessage.endsWith(`http://127.0.0.1:${server.port}/c/req_fb`));
@@ -145,11 +145,11 @@ test('the request body carries only the expected fields', async () => {
   assert.deepEqual(input.fileTypes, ['.ts', '.tsx']);
 });
 
-test('the API key travels in the Authorization header and nowhere else', async () => {
+test('the token travels in the Authorization header and nowhere else', async () => {
   const { server, res } = await hit();
   const headers = server.headers[0];
-  assert.equal(headers.authorization, `Bearer ${TEST_API_KEY}`);
-  assert.ok(!server.requests[0].raw.includes(TEST_API_KEY), 'the key must not be in the body');
+  assert.equal(headers.authorization, `Bearer ${TEST_TOKEN}`);
+  assert.ok(!server.requests[0].raw.includes(TEST_TOKEN), 'the token must not be in the body');
   assertNoKeyLeak(res, 'header only');
 });
 
@@ -179,7 +179,7 @@ test('no file contents, file paths, env vars or thinking blocks are transmitted'
       }),
       env: baseEnv({
         CLAUDECODE: '1',
-        PRMPT_API_KEY: TEST_API_KEY,
+        PRMPT_TOKEN: TEST_TOKEN,
         PRMPT_ENDPOINT: server.url,
         MY_UNRELATED_SECRET: 'ENV_VAR_VALUE_MUST_NOT_BE_SENT',
       }),
@@ -216,7 +216,7 @@ test('the same install produces a stable installId across runs', async () => {
     try {
       await runHook({
         stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-        env: baseEnv({ HOME: home, PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
+        env: baseEnv({ HOME: home, PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
       });
       seen.push(servedInput(server).installId);
     } finally {

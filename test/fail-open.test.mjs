@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assertSilentSuccess,
   baseEnv,
@@ -25,7 +25,7 @@ async function against(handler, { payload = CLAUDE_STOP, env = {} } = {}) {
   try {
     const res = await runHook({
       stdin: JSON.stringify(payload),
-      env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url, ...env }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url, ...env }),
     });
     return { res, server };
   } finally {
@@ -53,7 +53,7 @@ test('PRMPT_DISABLED=1: silent, and no request is attempted', async () => {
     const res = await runHook({
       stdin: JSON.stringify(CLAUDE_STOP),
       env: baseEnv({
-        PRMPT_API_KEY: TEST_API_KEY,
+        PRMPT_TOKEN: TEST_TOKEN,
         PRMPT_ENDPOINT: server.url,
         PRMPT_DISABLED: '1',
       }),
@@ -75,7 +75,7 @@ test('connection refused', async () => {
   const res = await runHook({
     stdin: JSON.stringify(CLAUDE_STOP),
     env: baseEnv({
-      PRMPT_API_KEY: TEST_API_KEY,
+      PRMPT_TOKEN: TEST_TOKEN,
       PRMPT_ENDPOINT: `http://127.0.0.1:${port}/graphql`,
     }),
   });
@@ -174,7 +174,7 @@ for (const [label, stdin] of [
     try {
       const res = await runHook({
         stdin,
-        env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
+        env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
       });
       assertSilentSuccess(res, label);
       assertNoKeyLeak(res, label);
@@ -228,7 +228,7 @@ test('an unreadable config.json does not break the hook', async () => {
   try {
     const res = await runHook({
       stdin: JSON.stringify(CLAUDE_STOP),
-      env: baseEnv({ HOME: home, PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
+      env: baseEnv({ HOME: home, PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     assertSilentSuccess(res, 'corrupt config');
   } finally {

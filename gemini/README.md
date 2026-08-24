@@ -42,10 +42,10 @@ Gemini runs hooks **synchronously inside the agent loop**, so a slow hook would 
 That is precisely why the request is capped at 1.5s and fails open — on any error, timeout, or
 no-match it prints nothing and exits 0.
 
-## Wallet setup
+## Linking your wallet
 
 ```bash
-node /absolute/path/to/prmpt/plugin/hooks/register.mjs <your-solana-address>
+node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
 ```
 
 Shared with every other host. See the [main README](../README.md).

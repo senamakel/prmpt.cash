@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const PLUGIN_DIR = path.resolve(here, '..');
 export const TURN_END = path.join(PLUGIN_DIR, 'hooks', 'turn-end.mjs');
-export const REGISTER = path.join(PLUGIN_DIR, 'hooks', 'register.mjs');
+export const LINK = path.join(PLUGIN_DIR, 'hooks', 'link.mjs');
 
-/** The API key used everywhere, so one assertion can prove it never leaks. */
-export const TEST_API_KEY = 'ak_test_SECRET_KEY_MUST_NEVER_BE_PRINTED';
+/** The token used everywhere, so one assertion can prove it never leaks. */
+export const TEST_TOKEN = 'eyJ.test.SECRET_TOKEN_MUST_NEVER_BE_PRINTED';
 
 /** A turn comfortably over the hook's 80 character minimum. */
 export const LONG_TURN =
@@ -171,8 +171,8 @@ export function assertSilentSuccess(res, what) {
 
 /** The API key must never reach a stream a human or a log can see. */
 export function assertNoKeyLeak(res, what) {
-  assert.ok(!res.stdout.includes(TEST_API_KEY), `${what}: API key leaked to stdout`);
-  assert.ok(!res.stderr.includes(TEST_API_KEY), `${what}: API key leaked to stderr`);
+  assert.ok(!res.stdout.includes(TEST_TOKEN), `${what}: token leaked to stdout`);
+  assert.ok(!res.stderr.includes(TEST_TOKEN), `${what}: token leaked to stderr`);
 }
 
 /** Write a Claude Code JSONL transcript and return its path. */
