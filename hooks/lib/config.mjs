@@ -1,4 +1,4 @@
-// adengine -- configuration, identity and cheap repo fingerprinting.
+// prmpt -- configuration, identity and cheap repo fingerprinting.
 //
 // Everything here is best-effort. A throw from this module would surface in the
 // user's session, so every filesystem touch is wrapped and every failure
@@ -9,17 +9,18 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-// The hosted engine. Override with ADENGINE_ENDPOINT to point at your own
+// The hosted engine. Override with PRMPT_ENDPOINT to point at your own
 // deployment, or at http://localhost:8080/graphql when running the backend
 // locally.
 export const DEFAULT_ENDPOINT = 'https://api.prmpt.click/graphql';
 
-/** ~/.config/adengine, honouring XDG_CONFIG_HOME. */
+/** ~/.config/prmpt, honouring XDG_CONFIG_HOME. */
 export function configDir() {
   const xdg = process.env.XDG_CONFIG_HOME;
   const base = xdg && xdg.trim() ? xdg : path.join(os.homedir(), '.config');
-  return path.join(base, 'adengine');
+  return path.join(base, 'prmpt');
 }
+
 
 export function configPath() {
   return path.join(configDir(), 'config.json');
@@ -84,16 +85,16 @@ export function loadConfig(payload = {}) {
   const cfg = readConfigFile();
   const cwd = (typeof payload.cwd === 'string' && payload.cwd) || process.cwd();
 
-  const envKey = process.env.ADENGINE_API_KEY;
+  const envKey = process.env.PRMPT_API_KEY;
   const apiKey = (envKey && envKey.trim()) || (typeof cfg.apiKey === 'string' ? cfg.apiKey.trim() : '');
 
-  const envEndpoint = process.env.ADENGINE_ENDPOINT;
+  const envEndpoint = process.env.PRMPT_ENDPOINT;
   const endpoint =
     (envEndpoint && envEndpoint.trim()) ||
     (typeof cfg.endpoint === 'string' && cfg.endpoint.trim()) ||
     DEFAULT_ENDPOINT;
 
-  const timeoutMs = Number.parseInt(process.env.ADENGINE_TIMEOUT_MS ?? '', 10);
+  const timeoutMs = Number.parseInt(process.env.PRMPT_TIMEOUT_MS ?? '', 10);
 
   return {
     apiKey,
@@ -101,7 +102,7 @@ export function loadConfig(payload = {}) {
     cwd,
     installId: resolveInstallId(cfg),
     sessionId: resolveSessionId(payload, cwd),
-    disabled: process.env.ADENGINE_DISABLED === '1',
+    disabled: process.env.PRMPT_DISABLED === '1',
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1500,
   };
 }

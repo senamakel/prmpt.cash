@@ -1,4 +1,4 @@
-// adengine -- the backend GraphQL client.
+// prmpt -- the backend GraphQL client.
 //
 // Two callers: the end-of-turn hook (serveAd) and the register CLI
 // (registerPublisher). serveAd never throws: it resolves to null on any
@@ -46,7 +46,7 @@ async function graphql({ endpoint, apiKey, query, variables, timeoutMs = 1500 })
     const headers = {
       'content-type': 'application/json',
       accept: 'application/json',
-      'user-agent': 'adengine-plugin/0.1.0',
+      'user-agent': 'prmpt-plugin/0.1.0',
     };
     if (apiKey) headers.authorization = `Bearer ${apiKey}`;
 
@@ -60,14 +60,14 @@ async function graphql({ endpoint, apiKey, query, variables, timeoutMs = 1500 })
     if (!res.ok) {
       // Drain so the socket can be reused/closed rather than left dangling.
       await res.text().catch(() => {});
-      const err = new Error(`adengine: HTTP ${res.status}`);
+      const err = new Error(`prmpt: HTTP ${res.status}`);
       err.status = res.status;
       throw err;
     }
 
     const json = await res.json();
     if (json && Array.isArray(json.errors) && json.errors.length > 0) {
-      const err = new Error(json.errors[0]?.message || 'adengine: GraphQL error');
+      const err = new Error(json.errors[0]?.message || 'prmpt: GraphQL error');
       err.graphQLErrors = json.errors;
       throw err;
     }
@@ -144,12 +144,12 @@ export async function registerPublisher({ endpoint, solanaWallet, timeoutMs = 15
   // Tolerate either a flat payload or one nested under `publisher`.
   const node = data?.registerPublisher;
   if (!node || typeof node !== 'object') {
-    throw new Error('adengine: registerPublisher returned no data');
+    throw new Error('prmpt: registerPublisher returned no data');
   }
   const installId = node.installId ?? node.publisher?.installId;
   const apiKey = node.apiKey ?? node.key;
   if (typeof apiKey !== 'string' || !apiKey) {
-    throw new Error('adengine: registerPublisher returned no API key');
+    throw new Error('prmpt: registerPublisher returned no API key');
   }
   return { installId: typeof installId === 'string' ? installId : null, apiKey };
 }

@@ -1,5 +1,5 @@
 /**
- * adengine on Amp.
+ * prmpt on Amp.
  *
  * Amp has no shell-hook config file — plugins are TypeScript modules that
  * subscribe to lifecycle events, so this is the one host that cannot reuse
@@ -7,8 +7,8 @@
  * turn's final assistant text, ask the backend once with a hard timeout, and
  * stay completely silent unless a decision comes back.
  *
- * Install: copy to `.amp/plugins/adengine.ts` in your project, or
- * `~/.config/amp/plugins/adengine.ts` to run it everywhere.
+ * Install: copy to `.amp/plugins/prmpt.ts` in your project, or
+ * `~/.config/amp/plugins/prmpt.ts` to run it everywhere.
  *
  * Two details worth knowing, both easy to get wrong:
  *   - `event.message` is the USER'S prompt that started the turn, not the
@@ -17,8 +17,8 @@
  */
 import type { PluginAPI } from '@ampcode/plugin'
 
-const ENDPOINT = process.env.ADENGINE_ENDPOINT ?? 'https://api.prmpt.click/graphql'
-const API_KEY = process.env.ADENGINE_API_KEY ?? ''
+const ENDPOINT = process.env.PRMPT_ENDPOINT ?? 'https://api.prmpt.click/graphql'
+const API_KEY = process.env.PRMPT_API_KEY ?? ''
 const TIMEOUT_MS = 1500
 const MIN_TURN_CHARS = 80
 const MAX_TURN_CHARS = 4000
@@ -53,7 +53,7 @@ export default function (amp: PluginAPI) {
   amp.on('agent.end', async (event, ctx) => {
     // Fail-open and silent is the whole contract: never interrupt a session.
     try {
-      if (!API_KEY || process.env.ADENGINE_DISABLED === '1') return
+      if (!API_KEY || process.env.PRMPT_DISABLED === '1') return
       if (event.status !== 'done') return
 
       let turnText = finalAssistantText((event as { messages?: unknown }).messages)
@@ -70,7 +70,7 @@ export default function (amp: PluginAPI) {
           query: SERVE_AD,
           variables: {
             input: {
-              installId: process.env.ADENGINE_INSTALL_ID ?? 'amp',
+              installId: process.env.PRMPT_INSTALL_ID ?? 'amp',
               sessionId: String((event as { thread?: { id?: string } }).thread?.id ?? 'amp'),
               turnText,
               harness: 'amp',

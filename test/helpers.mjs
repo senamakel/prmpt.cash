@@ -1,4 +1,4 @@
-// Shared machinery for the adengine plugin end-to-end suite.
+// Shared machinery for the prmpt plugin end-to-end suite.
 //
 // Every test spawns the real hook as a child process against a stub HTTP
 // server on an ephemeral port, so the suite is hermetic, parallel-safe and
@@ -31,7 +31,7 @@ export const LONG_TURN =
  * A throwaway directory, removed when the test process exits.
  *
  * Tests point HOME and XDG_CONFIG_HOME at one of these so a developer's real
- * ~/.config/adengine/config.json is never read and never written.
+ * ~/.config/prmpt/config.json is never read and never written.
  */
 const scratch = [];
 process.on('exit', () => {
@@ -40,7 +40,7 @@ process.on('exit', () => {
   }
 });
 
-export function tmpDir(prefix = 'adengine-test-') {
+export function tmpDir(prefix = 'prmpt-test-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   scratch.push(dir);
   return dir;
@@ -55,7 +55,7 @@ export function tmpDir(prefix = 'adengine-test-') {
  * assertions for us.
  */
 export function baseEnv(extra = {}) {
-  const home = extra.HOME ?? tmpDir('adengine-home-');
+  const home = extra.HOME ?? tmpDir('prmpt-home-');
   const env = {
     PATH: process.env.PATH,
     HOME: home,
@@ -176,7 +176,7 @@ export function assertNoKeyLeak(res, what) {
 }
 
 /** Write a Claude Code JSONL transcript and return its path. */
-export function writeTranscript(entries, dir = tmpDir('adengine-transcript-')) {
+export function writeTranscript(entries, dir = tmpDir('prmpt-transcript-')) {
   const file = path.join(dir, 'transcript.jsonl');
   fs.writeFileSync(file, entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
   return file;

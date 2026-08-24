@@ -1,7 +1,7 @@
 // register.mjs -- the one part of the plugin that is allowed to be loud.
 //
 // HOME and XDG_CONFIG_HOME are pointed at a throwaway directory in every test,
-// so a developer's real ~/.config/adengine/config.json is never touched.
+// so a developer's real ~/.config/prmpt/config.json is never touched.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,17 +14,17 @@ const GOOD_WALLET = '4Nd1mHb6QpJqRZ3nT8vKxYwsFgLpA2cDeUvWxYzAbCd';
 const MINTED_KEY = 'ak_live_ThisIsTheMintedApiKeySecretValue';
 
 function cfgPath(home) {
-  return path.join(home, '.config', 'adengine', 'config.json');
+  return path.join(home, '.config', 'prmpt', 'config.json');
 }
 
-async function register(args, { home = tmpDir('adengine-reg-'), handler } = {}) {
+async function register(args, { home = tmpDir('prmpt-reg-'), handler } = {}) {
   const server = await stubServer(handler ?? (() => ({
     data: { registerPublisher: { installId: 'inst_42', apiKey: MINTED_KEY } },
   })));
   try {
     const res = await run(REGISTER, {
       args,
-      env: baseEnv({ HOME: home, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ HOME: home, PRMPT_ENDPOINT: server.url }),
     });
     return { res, home, server };
   } finally {
@@ -104,7 +104,7 @@ test('the printed confirmation masks the key rather than echoing it', async () =
 });
 
 test('an existing config.json is merged, not clobbered, and stays 0600', async () => {
-  const home = tmpDir('adengine-reg-merge-');
+  const home = tmpDir('prmpt-reg-merge-');
   const file = cfgPath(home);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ keepMe: 'yes', apiKey: 'old' }), { mode: 0o644 });

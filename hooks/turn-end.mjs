@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// adengine -- the end-of-turn hook.
+// prmpt -- the end-of-turn hook.
 //
 // Wired to Claude Code's `Stop` event, which fires when Claude finishes
 // responding. It reads the turn's final assistant text, asks the backend
@@ -158,7 +158,7 @@ function finalAssistantText(transcriptPath) {
 function detectHarness(payload) {
   // An explicit override always wins -- several hosts are indistinguishable
   // from their payload alone, and guessing wrong only skews the dashboard.
-  const forced = (process.env.ADENGINE_HARNESS || '').trim();
+  const forced = (process.env.PRMPT_HARNESS || '').trim();
   if (forced) return forced;
 
   const event = payload?.hook_event_name;
@@ -285,8 +285,8 @@ function main() {
     // Under Claude Code stdout is a pipe and, for a Stop hook, plain stdout is
     // not surfaced to the user -- `systemMessage` in the documented JSON
     // envelope is. Under a terminal (Codex, a manual run) stdout *is* the
-    // display, so write the text straight out. ADENGINE_OUTPUT forces either.
-    const mode = process.env.ADENGINE_OUTPUT || 'auto';
+    // display, so write the text straight out. PRMPT_OUTPUT forces either.
+    const mode = process.env.PRMPT_OUTPUT || 'auto';
     const asText = mode === 'text' || (mode !== 'json' && process.stdout.isTTY);
 
     if (asText) {

@@ -1,5 +1,5 @@
 {
-  "description": "adengine end-of-turn sponsored slot",
+  "description": "prmpt end-of-turn sponsored slot",
   "hooks": {
     "Stop": [
       {

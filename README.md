@@ -55,7 +55,7 @@ The address is validated locally before anything is registered, so a typo fails
 before it can be bound to a key. On success:
 
 ```
-~/.config/adengine/config.json          mode 0600
+~/.config/prmpt/config.json          mode 0600
 { "installId": …, "apiKey": …, "endpoint": …, "solanaWallet": … }
 ```
 
@@ -92,7 +92,7 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
 Turn it off without uninstalling:
 
 ```sh
-export ADENGINE_DISABLED=1
+export PRMPT_DISABLED=1
 ```
 
 ## What is sent
@@ -137,7 +137,7 @@ node --test test/*.test.mjs      # 77 tests, no network, no dependencies
 Point at a local backend:
 
 ```sh
-export ADENGINE_ENDPOINT=http://localhost:8080/graphql
+export PRMPT_ENDPOINT=http://localhost:8080/graphql
 ```
 
 ## Uninstall
@@ -147,7 +147,7 @@ export ADENGINE_ENDPOINT=http://localhost:8080/graphql
 ```
 
 Your hook entries are removed and each touched config is backed up next to
-itself as `.bak`. The API key at `~/.config/adengine/config.json` is left alone —
+itself as `.bak`. The API key at `~/.config/prmpt/config.json` is left alone —
 delete it too to unlink the wallet completely.
 
 ## License

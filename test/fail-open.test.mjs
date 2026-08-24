@@ -25,7 +25,7 @@ async function against(handler, { payload = CLAUDE_STOP, env = {} } = {}) {
   try {
     const res = await runHook({
       stdin: JSON.stringify(payload),
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url, ...env }),
+      env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url, ...env }),
     });
     return { res, server };
   } finally {
@@ -38,7 +38,7 @@ test('no API key configured: silent, and no request is attempted', async () => {
   try {
     const res = await runHook({
       stdin: JSON.stringify(CLAUDE_STOP),
-      env: baseEnv({ ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_ENDPOINT: server.url }),
     });
     assertSilentSuccess(res, 'no api key');
     assert.equal(server.requests.length, 0, 'must not call the backend without a key');
@@ -47,15 +47,15 @@ test('no API key configured: silent, and no request is attempted', async () => {
   }
 });
 
-test('ADENGINE_DISABLED=1: silent, and no request is attempted', async () => {
+test('PRMPT_DISABLED=1: silent, and no request is attempted', async () => {
   const server = await stubServer(() => ({ data: { serveAd: null } }));
   try {
     const res = await runHook({
       stdin: JSON.stringify(CLAUDE_STOP),
       env: baseEnv({
-        ADENGINE_API_KEY: TEST_API_KEY,
-        ADENGINE_ENDPOINT: server.url,
-        ADENGINE_DISABLED: '1',
+        PRMPT_API_KEY: TEST_API_KEY,
+        PRMPT_ENDPOINT: server.url,
+        PRMPT_DISABLED: '1',
       }),
     });
     assertSilentSuccess(res, 'disabled');
@@ -75,8 +75,8 @@ test('connection refused', async () => {
   const res = await runHook({
     stdin: JSON.stringify(CLAUDE_STOP),
     env: baseEnv({
-      ADENGINE_API_KEY: TEST_API_KEY,
-      ADENGINE_ENDPOINT: `http://127.0.0.1:${port}/graphql`,
+      PRMPT_API_KEY: TEST_API_KEY,
+      PRMPT_ENDPOINT: `http://127.0.0.1:${port}/graphql`,
     }),
   });
   assertSilentSuccess(res, 'connection refused');
@@ -174,7 +174,7 @@ for (const [label, stdin] of [
     try {
       const res = await runHook({
         stdin,
-        env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+        env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
       });
       assertSilentSuccess(res, label);
       assertNoKeyLeak(res, label);
@@ -186,7 +186,7 @@ for (const [label, stdin] of [
 }
 
 test('a transcript_path that does not exist', async () => {
-  const missing = path.join(tmpDir('adengine-missing-'), 'nope', 'transcript.jsonl');
+  const missing = path.join(tmpDir('prmpt-missing-'), 'nope', 'transcript.jsonl');
   const { res, server } = await against(() => ({ data: { serveAd: null } }), {
     payload: { session_id: 's', transcript_path: missing, hook_event_name: 'Stop' },
     env: { CLAUDECODE: '1' },
@@ -218,8 +218,8 @@ test('a turn exactly at the minimum is sent', async () => {
 });
 
 test('an unreadable config.json does not break the hook', async () => {
-  const home = tmpDir('adengine-badcfg-');
-  const cfgDir = path.join(home, '.config', 'adengine');
+  const home = tmpDir('prmpt-badcfg-');
+  const cfgDir = path.join(home, '.config', 'prmpt');
   const fs = await import('node:fs');
   fs.mkdirSync(cfgDir, { recursive: true });
   fs.writeFileSync(path.join(cfgDir, 'config.json'), 'not json');
@@ -228,7 +228,7 @@ test('an unreadable config.json does not break the hook', async () => {
   try {
     const res = await runHook({
       stdin: JSON.stringify(CLAUDE_STOP),
-      env: baseEnv({ HOME: home, ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ HOME: home, PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
     });
     assertSilentSuccess(res, 'corrupt config');
   } finally {

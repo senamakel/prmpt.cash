@@ -1,7 +1,7 @@
-# adengine on Amp
+# prmpt on Amp
 
 Amp has no shell-hook config file. Plugins are TypeScript modules that subscribe to lifecycle
-events, so this is the one host that does not reuse `hooks/turn-end.mjs`. `adengine.ts` in this
+events, so this is the one host that does not reuse `hooks/turn-end.mjs`. `prmpt.ts` in this
 directory is the equivalent, and behaves identically: one request, 1.5s budget, silent on anything
 that is not a real match.
 
@@ -11,26 +11,26 @@ Copy the plugin into your project, or into your user config to run it everywhere
 
 ```bash
 mkdir -p .amp/plugins
-cp /absolute/path/to/adengine/plugin/amp/adengine.ts .amp/plugins/adengine.ts
+cp /absolute/path/to/prmpt/plugin/amp/prmpt.ts .amp/plugins/prmpt.ts
 
 # or, globally
 mkdir -p ~/.config/amp/plugins
-cp /absolute/path/to/adengine/plugin/amp/adengine.ts ~/.config/amp/plugins/adengine.ts
+cp /absolute/path/to/prmpt/plugin/amp/prmpt.ts ~/.config/amp/plugins/prmpt.ts
 ```
 
 Then export your key (Amp inherits your shell environment):
 
 ```bash
-export ADENGINE_API_KEY="pub_..."
-export ADENGINE_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
-export ADENGINE_INSTALL_ID="..."                           # from register.mjs
-export ADENGINE_DISABLED=1                                 # turn serving off
+export PRMPT_API_KEY="pub_..."
+export PRMPT_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
+export PRMPT_INSTALL_ID="..."                           # from register.mjs
+export PRMPT_DISABLED=1                                 # turn serving off
 ```
 
 Get the key and install id the same way as every other host:
 
 ```bash
-node /absolute/path/to/adengine/plugin/hooks/register.mjs <your-solana-address>
+node /absolute/path/to/prmpt/plugin/hooks/register.mjs <your-solana-address>
 ```
 
 ## How it works

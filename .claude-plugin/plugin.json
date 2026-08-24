@@ -1,9 +1,9 @@
 {
-  "name": "adengine",
+  "name": "prmpt",
   "version": "0.1.0",
   "description": "Surfaces a single, clearly-labelled sponsored line at the end of an agent turn and pays the developer 70% of the click price in USDC on Solana.",
   "author": {
-    "name": "tryprompt.cash",
+    "name": "prmpt.click",
     "url": "https://prmpt.click"
   },
   "homepage": "https://github.com/senamakel/prmpt.click",

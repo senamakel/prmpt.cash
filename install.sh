@@ -49,7 +49,7 @@ ${B}prmpt.click installer${R}
   --wallet <address>   Solana address that receives payouts (base58, 32-44 chars)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
-  --dir <path>         Where to install. Default: \$XDG_DATA_HOME/tryprompt
+  --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
   --project            Configure ./ (this project) instead of your home directory
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
@@ -120,12 +120,12 @@ if [ "$UNINSTALL" -eq 1 ]; then
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
     ' "$f" 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
   done
-  for f in "$HOME/.config/amp/plugins/adengine.ts" "./.amp/plugins/adengine.ts"; do
+  for f in "$HOME/.config/amp/plugins/prmpt.ts" "./.amp/plugins/prmpt.ts"; do
     [ -f "$f" ] && rm -f "$f" && ok "removed $f"
   done
   [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR" && ok "removed $INSTALL_DIR"
   say ""
-  say "Your API key at ${D}~/.config/adengine/config.json${R} was left alone."
+  say "Your API key at ${D}~/.config/prmpt/config.json${R} was left alone."
   say "Delete it too if you want to unlink the wallet completely."
   exit 0
 fi
@@ -176,11 +176,11 @@ HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
 say ""
 if [ -n "$WALLET" ]; then
   say "${B}Registering your wallet${R}"
-  ADENGINE_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/register.mjs" "$WALLET" \
+  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/register.mjs" "$WALLET" \
     || die "registration failed -- nothing was wired up. Fix the above and re-run."
 else
-  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/adengine/config.json" ]; then
-    skip "already registered (${D}~/.config/adengine/config.json${R})"
+  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
+    skip "already registered (${D}~/.config/prmpt/config.json${R})"
   else
     warn "no --wallet given: the hook will stay silent until you register."
     warn "run: node $INSTALL_DIR/hooks/register.mjs <solana-address>"
@@ -219,7 +219,7 @@ merge_hook() {
       }
     }
     const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
-    if (matcher) entry.name = "tryprompt";
+    if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
@@ -269,9 +269,9 @@ else skip "Gemini CLI not found"; fi
 
 # Amp -- a TypeScript plugin, not a hook. Unverified against a live install.
 if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || [ -d "$HOME/.config/amp" ]; }; }; then
-  if [ -f "$INSTALL_DIR/amp/adengine.ts" ]; then
-    mkdir -p "$AMP_DIR" && cp "$INSTALL_DIR/amp/adengine.ts" "$AMP_DIR/adengine.ts"
-    ok "Amp          $AMP_DIR/adengine.ts  ${D}(agent.end, unverified)${R}"
+  if [ -f "$INSTALL_DIR/amp/prmpt.ts" ]; then
+    mkdir -p "$AMP_DIR" && cp "$INSTALL_DIR/amp/prmpt.ts" "$AMP_DIR/prmpt.ts"
+    ok "Amp          $AMP_DIR/prmpt.ts  ${D}(agent.end, unverified)${R}"
     CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Amp not found"; fi
@@ -285,7 +285,7 @@ if [ "$CONFIGURED" -eq 0 ]; then
 fi
 
 if [ "$ENDPOINT" != "$DEFAULT_ENDPOINT" ]; then
-  say "${Y}note${R} endpoint is $ENDPOINT -- export ADENGINE_ENDPOINT to match in your shell."
+  say "${Y}note${R} endpoint is $ENDPOINT -- export PRMPT_ENDPOINT to match in your shell."
 fi
 
 say "${B}Done.${R} $CONFIGURED agent(s) configured."
@@ -294,5 +294,5 @@ say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
 say ""
-say "  ${D}Turn it off:${R}  export ADENGINE_DISABLED=1"
+say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
 say "  ${D}Remove it:${R}    $0 --uninstall"

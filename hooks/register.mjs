@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// adengine -- publisher registration.
+// prmpt -- publisher registration.
 //
 //   node hooks/register.mjs <solana-wallet-address>
 //
 // Validates the wallet locally, registers it with the backend, and persists
-// {installId, apiKey, endpoint} to ~/.config/adengine/config.json at mode 0600.
+// {installId, apiKey, endpoint} to ~/.config/prmpt/config.json at mode 0600.
 //
 // This is the one place in the plugin that is allowed to be loud: it is run by
 // hand, and a silent failure here would leave the publisher wondering why they
@@ -49,28 +49,28 @@ async function main() {
   if (!wallet || wallet === '-h' || wallet === '--help') {
     process.stderr.write(
       'usage: node hooks/register.mjs <solana-wallet-address>\n\n' +
-      '  Registers your wallet as an adengine publisher and writes the API key\n' +
+      '  Registers your wallet as an prmpt publisher and writes the API key\n' +
       `  to ${configPath()} (mode 0600).\n\n` +
-      `  Endpoint: $ADENGINE_ENDPOINT (default ${DEFAULT_ENDPOINT})\n`,
+      `  Endpoint: $PRMPT_ENDPOINT (default ${DEFAULT_ENDPOINT})\n`,
     );
     process.exit(wallet ? 0 : 2);
   }
 
   const problem = validateWallet(wallet);
   if (problem) {
-    process.stderr.write(`adengine: invalid Solana wallet -- ${problem}\n`);
+    process.stderr.write(`prmpt: invalid Solana wallet -- ${problem}\n`);
     process.exit(1);
   }
 
-  const endpoint = (process.env.ADENGINE_ENDPOINT || '').trim() || DEFAULT_ENDPOINT;
+  const endpoint = (process.env.PRMPT_ENDPOINT || '').trim() || DEFAULT_ENDPOINT;
   const solanaWallet = wallet.trim();
 
   let result;
   try {
     result = await registerPublisher({ endpoint, solanaWallet });
   } catch (err) {
-    process.stderr.write(`adengine: registration failed -- ${err?.message ?? err}\n`);
-    process.stderr.write(`adengine: endpoint was ${endpoint}\n`);
+    process.stderr.write(`prmpt: registration failed -- ${err?.message ?? err}\n`);
+    process.stderr.write(`prmpt: endpoint was ${endpoint}\n`);
     process.exit(1);
   }
 
@@ -80,23 +80,23 @@ async function main() {
   try {
     file = writeConfig({ installId, apiKey: result.apiKey, endpoint, solanaWallet });
   } catch (err) {
-    process.stderr.write(`adengine: could not write config -- ${err?.message ?? err}\n`);
+    process.stderr.write(`prmpt: could not write config -- ${err?.message ?? err}\n`);
     process.exit(1);
   }
 
   process.stdout.write(
-    'adengine: registered.\n' +
+    'prmpt: registered.\n' +
     `  wallet:     ${solanaWallet}\n` +
     `  install id: ${installId}\n` +
     `  api key:    ${maskKey(result.apiKey)}  (stored, not shown)\n` +
     `  endpoint:   ${endpoint}\n` +
     `  config:     ${file} (0600)\n\n` +
     'Clicks on ads served from this install now pay 70% of the clearing price\n' +
-    'to that wallet in USDC. Set ADENGINE_DISABLED=1 to turn serving off.\n',
+    'to that wallet in USDC. Set PRMPT_DISABLED=1 to turn serving off.\n',
   );
 }
 
 main().catch((err) => {
-  process.stderr.write(`adengine: ${err?.message ?? err}\n`);
+  process.stderr.write(`prmpt: ${err?.message ?? err}\n`);
   process.exit(1);
 });
