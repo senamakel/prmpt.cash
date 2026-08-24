@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assertSilentSuccess,
   baseEnv,
@@ -29,7 +29,7 @@ test('a server that never responds is abandoned well inside 3s', async () => {
   try {
     const res = await runHook({
       stdin: JSON.stringify({ hook_event_name: 'AfterAgent', prompt_response: LONG_TURN }),
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
 
     assertSilentSuccess(res, 'hanging server');
@@ -54,7 +54,7 @@ test('a server that never responds is abandoned well inside 3s', async () => {
   }
 });
 
-test('ADENGINE_TIMEOUT_MS shortens the deadline', async () => {
+test('PRMPT_TIMEOUT_MS shortens the deadline', async () => {
   const sockets = [];
   const server = await stubServer((_body, req) => {
     sockets.push(req.socket);
@@ -64,9 +64,9 @@ test('ADENGINE_TIMEOUT_MS shortens the deadline', async () => {
     const res = await runHook({
       stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
       env: baseEnv({
-        ADENGINE_API_KEY: TEST_API_KEY,
-        ADENGINE_ENDPOINT: server.url,
-        ADENGINE_TIMEOUT_MS: '200',
+        PRMPT_TOKEN: TEST_TOKEN,
+        PRMPT_ENDPOINT: server.url,
+        PRMPT_TIMEOUT_MS: '200',
       }),
     });
     assertSilentSuccess(res, 'short deadline');
@@ -98,7 +98,7 @@ test('a slow-but-inside-the-deadline response is still used', async () => {
   try {
     const res = await runHook({
       stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     assert.equal(res.code, 0);
     assert.equal(res.stderr, '');

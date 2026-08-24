@@ -1,7 +1,7 @@
-// adengine -- the backend GraphQL client.
+// prmpt -- the backend GraphQL client.
 //
-// Two callers: the end-of-turn hook (serveAd) and the register CLI
-// (registerPublisher). serveAd never throws: it resolves to null on any
+// Two callers: the end-of-turn hook (serveAd) and the link CLI
+// (exchangeInstallCode). serveAd never throws: it resolves to null on any
 // failure at all, because a failed ad request must be indistinguishable from
 // "no ad matched".
 
@@ -14,14 +14,18 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
   }
 }`;
 
+// A terminal cannot open a wallet prompt, so the plugin does not sign anything.
+// The wallet is proven once in the dashboard, which mints a one-off code; this
+// exchanges that code for the plugin's own long-lived token.
+//
 // installId lives on the nested `publisher`, not on the payload. Asking for it
 // at the top level is a VALIDATION error, so the request fails with HTTP 422
 // before a response body exists -- which the tolerant parsing below can do
-// nothing about, because it never runs. Registration was impossible until this
-// matched the schema.
-const REGISTER_PUBLISHER = `mutation RegisterPublisher($solanaWallet: String!) {
-  registerPublisher(solanaWallet: $solanaWallet) {
-    apiKey
+// nothing about, because it never runs.
+const EXCHANGE_INSTALL_CODE = `mutation ExchangeInstallCode($code: String!) {
+  exchangeInstallCode(code: $code) {
+    token
+    expiresAt
     publisher {
       installId
       solanaWallet
@@ -37,7 +41,7 @@ const REGISTER_PUBLISHER = `mutation RegisterPublisher($solanaWallet: String!) {
  * latency. The timer is unref'd so a resolved request never keeps the process
  * alive waiting for it.
  */
-async function graphql({ endpoint, apiKey, query, variables, timeoutMs = 1500 }) {
+async function graphql({ endpoint, token, query, variables, timeoutMs = 1500 }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   if (typeof timer.unref === 'function') timer.unref();
@@ -46,9 +50,9 @@ async function graphql({ endpoint, apiKey, query, variables, timeoutMs = 1500 })
     const headers = {
       'content-type': 'application/json',
       accept: 'application/json',
-      'user-agent': 'adengine-plugin/0.1.0',
+      'user-agent': 'prmpt-plugin/0.1.0',
     };
-    if (apiKey) headers.authorization = `Bearer ${apiKey}`;
+    if (token) headers.authorization = `Bearer ${token}`;
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -60,14 +64,14 @@ async function graphql({ endpoint, apiKey, query, variables, timeoutMs = 1500 })
     if (!res.ok) {
       // Drain so the socket can be reused/closed rather than left dangling.
       await res.text().catch(() => {});
-      const err = new Error(`adengine: HTTP ${res.status}`);
+      const err = new Error(`prmpt: HTTP ${res.status}`);
       err.status = res.status;
       throw err;
     }
 
     const json = await res.json();
     if (json && Array.isArray(json.errors) && json.errors.length > 0) {
-      const err = new Error(json.errors[0]?.message || 'adengine: GraphQL error');
+      const err = new Error(json.errors[0]?.message || 'prmpt: GraphQL error');
       err.graphQLErrors = json.errors;
       throw err;
     }
@@ -97,7 +101,7 @@ export async function serveAd(config, input) {
   try {
     const data = await graphql({
       endpoint: config.endpoint,
-      apiKey: config.apiKey,
+      token: config.token,
       query: SERVE_AD,
       variables: { input },
       timeoutMs: config.timeoutMs,
@@ -128,28 +132,32 @@ export async function serveAd(config, input) {
 }
 
 /**
- * Register a publisher wallet and mint an API key.
+ * Redeem a one-off install code for this install's own token.
  *
- * Unlike serveAd this one throws, because the register CLI is interactive and
- * the operator needs to see why it failed.
+ * Unlike serveAd this one throws, because the link CLI is interactive and the
+ * publisher needs to see why it failed. The code is single-use: a failure here
+ * means going back to the dashboard for a fresh one.
  */
-export async function registerPublisher({ endpoint, solanaWallet, timeoutMs = 15000 }) {
+export async function exchangeInstallCode({ endpoint, code, timeoutMs = 15000 }) {
   const data = await graphql({
     endpoint,
-    query: REGISTER_PUBLISHER,
-    variables: { solanaWallet },
+    query: EXCHANGE_INSTALL_CODE,
+    variables: { code },
     timeoutMs,
   });
 
-  // Tolerate either a flat payload or one nested under `publisher`.
-  const node = data?.registerPublisher;
+  const node = data?.exchangeInstallCode;
   if (!node || typeof node !== 'object') {
-    throw new Error('adengine: registerPublisher returned no data');
+    throw new Error('prmpt: exchangeInstallCode returned no data');
   }
-  const installId = node.installId ?? node.publisher?.installId;
-  const apiKey = node.apiKey ?? node.key;
-  if (typeof apiKey !== 'string' || !apiKey) {
-    throw new Error('adengine: registerPublisher returned no API key');
+  const token = node.token;
+  if (typeof token !== 'string' || !token) {
+    throw new Error('prmpt: exchangeInstallCode returned no token');
   }
-  return { installId: typeof installId === 'string' ? installId : null, apiKey };
+  return {
+    token,
+    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
+    installId: node.publisher?.installId ?? null,
+    solanaWallet: node.publisher?.solanaWallet ?? null,
+  };
 }

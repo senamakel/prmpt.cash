@@ -12,7 +12,7 @@ import path from 'node:path';
 
 import { PLUGIN_DIR } from './helpers.mjs';
 
-const AMP = path.join(PLUGIN_DIR, 'amp', 'adengine.ts');
+const AMP = path.join(PLUGIN_DIR, 'amp', 'prmpt.ts');
 const src = fs.readFileSync(AMP, 'utf8');
 
 /** The source with comments stripped, so prose about a trap is not the trap. */
@@ -26,7 +26,7 @@ test('the agent.end handler never returns an action (which would start another t
   // infinite loop of them.
   assert.ok(
     !/\baction\s*:/.test(code),
-    'amp/adengine.ts must never return an `action`; that would start another turn',
+    'amp/prmpt.ts must never return an `action`; that would start another turn',
   );
   assert.ok(
     !/return\s*\{/.test(code),
@@ -37,10 +37,10 @@ test('the agent.end handler never returns an action (which would start another t
 test('it reads event.messages, not event.message', () => {
   // `event.message` is the USER'S prompt that started the turn. Sending that
   // as the turn text would both mis-target the ad and transmit user input.
-  assert.ok(/\.messages\b/.test(code), 'amp/adengine.ts must read event.messages');
+  assert.ok(/\.messages\b/.test(code), 'amp/prmpt.ts must read event.messages');
   assert.ok(
     !/\bevent\s*(?:as[^)]*\)?)?\s*\.message\b(?!s)/.test(code),
-    'amp/adengine.ts must not read event.message (that is the user prompt)',
+    'amp/prmpt.ts must not read event.message (that is the user prompt)',
   );
   assert.ok(
     !/\bmessage\b(?!s)\s*:/.test(code.replace(/messages\?:/g, '')),
@@ -50,7 +50,7 @@ test('it reads event.messages, not event.message', () => {
 
 test('it stays silent on failure and honours the shared opt-outs', () => {
   assert.ok(/catch\s*\{/.test(code) || /catch\s*\(/.test(code), 'the handler must swallow errors');
-  assert.ok(/ADENGINE_DISABLED/.test(code), 'the opt-out must be honoured here too');
+  assert.ok(/PRMPT_DISABLED/.test(code), 'the opt-out must be honoured here too');
   assert.ok(/AbortSignal\.timeout\(\s*TIMEOUT_MS\s*\)/.test(code), 'the request must have a deadline');
   assert.ok(/const TIMEOUT_MS = 1500/.test(code), 'the deadline must match the hook (1500ms)');
   assert.ok(/const MIN_TURN_CHARS = 80/.test(code));

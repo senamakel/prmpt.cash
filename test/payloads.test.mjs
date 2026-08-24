@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assistantEntry,
   baseEnv,
@@ -33,8 +33,8 @@ async function serve({ payload, argv = false, env = {} } = {}) {
       args: argv ? [JSON.stringify(payload)] : [],
       stdin: argv ? '' : JSON.stringify(payload),
       env: baseEnv({
-        ADENGINE_API_KEY: TEST_API_KEY,
-        ADENGINE_ENDPOINT: server.url,
+        PRMPT_TOKEN: TEST_TOKEN,
+        PRMPT_ENDPOINT: server.url,
         ...env,
       }),
     });
@@ -194,7 +194,7 @@ test('Codex notify: a non-turn notify type is ignored entirely', async () => {
   try {
     const res = await runHook({
       args: [JSON.stringify({ type: 'agent-something-else', 'last-assistant-message': LONG_TURN })],
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     assert.equal(res.code, 0);
     assert.equal(res.stdout, '');
@@ -242,10 +242,10 @@ test('payloads without a transcript omit harnessVersion and model rather than se
   }
 });
 
-test('ADENGINE_HARNESS overrides detection', async () => {
+test('PRMPT_HARNESS overrides detection', async () => {
   const { input } = await serve({
     payload: { hook_event_name: 'Stop', last_assistant_message: LONG_TURN },
-    env: { CLAUDECODE: '1', ADENGINE_HARNESS: 'my-custom-agent' },
+    env: { CLAUDECODE: '1', PRMPT_HARNESS: 'my-custom-agent' },
   });
   assert.equal(input.harness, 'my-custom-agent');
 });
@@ -263,7 +263,7 @@ test('a turn longer than the 4000 char ceiling is clipped to its tail', async ()
 });
 
 test('a huge transcript is read from its tail without stalling', async () => {
-  const dir = tmpDir('adengine-big-');
+  const dir = tmpDir('prmpt-big-');
   const file = path.join(dir, 'big.jsonl');
   const filler = Array.from({ length: 4000 }, (_, i) =>
     JSON.stringify(assistantEntry(`old line ${i} ` + 'y'.repeat(200))),

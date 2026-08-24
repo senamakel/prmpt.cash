@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assistantEntry,
   baseEnv,
@@ -29,7 +29,7 @@ async function hit(over = {}, { payload, env = {} } = {}) {
   try {
     const res = await runHook({
       stdin: JSON.stringify(payload ?? { hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url, ...env }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url, ...env }),
     });
     assertNoKeyLeak(res, 'decision');
     return { res, server, input: servedInput(server) };
@@ -97,7 +97,7 @@ test('a missing clickUrl falls back to a URL derived from the endpoint', async (
   try {
     const res = await runHook({
       stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-      env: baseEnv({ ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     const { systemMessage } = JSON.parse(res.stdout.trim());
     assert.ok(systemMessage.endsWith(`http://127.0.0.1:${server.port}/c/req_fb`));
@@ -107,8 +107,8 @@ test('a missing clickUrl falls back to a URL derived from the endpoint', async (
   }
 });
 
-test('ADENGINE_OUTPUT=text writes the plain block instead of the JSON envelope', async () => {
-  const { res } = await hit({}, { env: { ADENGINE_OUTPUT: 'text' } });
+test('PRMPT_OUTPUT=text writes the plain block instead of the JSON envelope', async () => {
+  const { res } = await hit({}, { env: { PRMPT_OUTPUT: 'text' } });
   assert.equal(res.stderr, '');
   const lines = res.stdout.trimEnd().split('\n');
   assert.equal(lines.length, 3);
@@ -118,15 +118,15 @@ test('ADENGINE_OUTPUT=text writes the plain block instead of the JSON envelope',
   assert.ok(!res.stdout.includes('\x1b['));
 });
 
-test('ADENGINE_OUTPUT=json forces the envelope', async () => {
-  const { res } = await hit({}, { env: { ADENGINE_OUTPUT: 'json' } });
+test('PRMPT_OUTPUT=json forces the envelope', async () => {
+  const { res } = await hit({}, { env: { PRMPT_OUTPUT: 'json' } });
   assert.ok(JSON.parse(res.stdout.trim()).systemMessage);
 });
 
 // --- privacy ---------------------------------------------------------------
 
 test('the request body carries only the expected fields', async () => {
-  const cwd = tmpDir('adengine-repo-');
+  const cwd = tmpDir('prmpt-repo-');
   fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"x"}');
   fs.writeFileSync(path.join(cwd, 'tsconfig.json'), '{}');
 
@@ -145,16 +145,16 @@ test('the request body carries only the expected fields', async () => {
   assert.deepEqual(input.fileTypes, ['.ts', '.tsx']);
 });
 
-test('the API key travels in the Authorization header and nowhere else', async () => {
+test('the token travels in the Authorization header and nowhere else', async () => {
   const { server, res } = await hit();
   const headers = server.headers[0];
-  assert.equal(headers.authorization, `Bearer ${TEST_API_KEY}`);
-  assert.ok(!server.requests[0].raw.includes(TEST_API_KEY), 'the key must not be in the body');
+  assert.equal(headers.authorization, `Bearer ${TEST_TOKEN}`);
+  assert.ok(!server.requests[0].raw.includes(TEST_TOKEN), 'the token must not be in the body');
   assertNoKeyLeak(res, 'header only');
 });
 
 test('no file contents, file paths, env vars or thinking blocks are transmitted', async () => {
-  const repo = tmpDir('adengine-privacy-');
+  const repo = tmpDir('prmpt-privacy-');
   const SECRET_FILE_CONTENT = 'AWS_SECRET_ACCESS_KEY=hunter2-do-not-transmit';
   const secretFile = path.join(repo, 'secrets.env');
   fs.writeFileSync(secretFile, SECRET_FILE_CONTENT);
@@ -179,8 +179,8 @@ test('no file contents, file paths, env vars or thinking blocks are transmitted'
       }),
       env: baseEnv({
         CLAUDECODE: '1',
-        ADENGINE_API_KEY: TEST_API_KEY,
-        ADENGINE_ENDPOINT: server.url,
+        PRMPT_TOKEN: TEST_TOKEN,
+        PRMPT_ENDPOINT: server.url,
         MY_UNRELATED_SECRET: 'ENV_VAR_VALUE_MUST_NOT_BE_SENT',
       }),
     });
@@ -209,14 +209,14 @@ test('no file contents, file paths, env vars or thinking blocks are transmitted'
 });
 
 test('the same install produces a stable installId across runs', async () => {
-  const home = tmpDir('adengine-stable-');
+  const home = tmpDir('prmpt-stable-');
   const seen = [];
   for (let i = 0; i < 2; i++) {
     const server = await stubServer(() => ({ data: { serveAd: null } }));
     try {
       await runHook({
         stdin: JSON.stringify({ hook_event_name: 'Stop', last_assistant_message: LONG_TURN }),
-        env: baseEnv({ HOME: home, ADENGINE_API_KEY: TEST_API_KEY, ADENGINE_ENDPOINT: server.url }),
+        env: baseEnv({ HOME: home, PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
       });
       seen.push(servedInput(server).installId);
     } finally {

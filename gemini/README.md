@@ -1,4 +1,4 @@
-# adengine on Gemini CLI
+# prmpt on Gemini CLI
 
 Gemini CLI fires an `AfterAgent` hook when the agent finishes producing a response, and hands it the
 final text. `hooks/turn-end.mjs` handles it with no changes.
@@ -15,9 +15,9 @@ Add to `.gemini/settings.json` in your project, or `~/.gemini/settings.json` to 
         "matcher": "*",
         "hooks": [
           {
-            "name": "adengine",
+            "name": "prmpt",
             "type": "command",
-            "command": "node /absolute/path/to/adengine/plugin/hooks/turn-end.mjs",
+            "command": "node /absolute/path/to/prmpt/plugin/hooks/turn-end.mjs",
             "timeout": 5000
           }
         ]
@@ -42,10 +42,10 @@ Gemini runs hooks **synchronously inside the agent loop**, so a slow hook would 
 That is precisely why the request is capped at 1.5s and fails open — on any error, timeout, or
 no-match it prints nothing and exits 0.
 
-## Wallet setup
+## Linking your wallet
 
 ```bash
-node /absolute/path/to/adengine/plugin/hooks/register.mjs <your-solana-address>
+node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
 ```
 
 Shared with every other host. See the [main README](../README.md).
@@ -55,7 +55,7 @@ Shared with every other host. See the [main README](../README.md).
 Gemini CLI inherits your shell environment:
 
 ```bash
-export ADENGINE_ENDPOINT="https://api.tryprompt.cash/graphql"   # optional, this is the default
-export ADENGINE_HARNESS="gemini-cli"                       # optional; auto-detected
-export ADENGINE_DISABLED=1                                 # turn serving off
+export PRMPT_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
+export PRMPT_HARNESS="gemini-cli"                       # optional; auto-detected
+export PRMPT_DISABLED=1                                 # turn serving off
 ```

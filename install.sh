@@ -1,14 +1,14 @@
 #!/bin/sh
-# tryprompt.cash -- one installer for every supported coding agent.
+# prmpt.click -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://tryprompt.cash/install.sh | sh -s -- --wallet <solana-address>
+#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
 #
-# Or, from a checkout:  ./install.sh --wallet <solana-address>
+# Or, from a checkout:  ./install.sh --code <install-code>
 #
 # What it does, in order:
 #   1. checks Node >= 18                (the hook is plain ESM, no dependencies)
 #   2. copies the plugin to a stable directory
-#   3. registers your wallet and stores the API key at mode 0600
+#   3. redeems your install code and stores the token at mode 0600
 #   4. wires up every agent it finds, using that agent's own documented hook
 #
 # It is idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -18,11 +18,11 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_URL="https://github.com/senamakel/tryprompt.cash.git"
-TARBALL_URL="https://codeload.github.com/senamakel/tryprompt.cash/tar.gz/refs/heads/main"
-DEFAULT_ENDPOINT="https://api.tryprompt.cash/graphql"
+REPO_URL="https://github.com/senamakel/prmpt.click.git"
+TARBALL_URL="https://codeload.github.com/senamakel/prmpt.click/tar.gz/refs/heads/main"
+DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
 
-WALLET=""
+CODE=""
 ENDPOINT=""
 AGENTS=""
 UNINSTALL=0
@@ -44,27 +44,30 @@ die()  { printf '%serror:%s %s\n' "$E" "$R" "$*" >&2; exit 1; }
 
 usage() {
   cat <<USAGE
-${B}tryprompt.cash installer${R}
+${B}prmpt.click installer${R}
 
-  --wallet <address>   Solana address that receives payouts (base58, 32-44 chars)
+  --code <code>        One-off install code from the dashboard (10 chars)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
-  --dir <path>         Where to install. Default: \$XDG_DATA_HOME/tryprompt
+  --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
   --project            Configure ./ (this project) instead of your home directory
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
-Run with no --wallet to install and wire up the agents without registering;
+Your wallet is proven by signature in the dashboard, which is the only place a
+wallet prompt can open. It hands you a one-off code; this passes it on.
+
+Run with no --code to install and wire up the agents without linking;
 you can register later with:
 
-  node <install-dir>/hooks/register.mjs <solana-address>
+  node <install-dir>/hooks/link.mjs <install-code>
 USAGE
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --wallet)    WALLET="${2:-}"; shift 2 ;;
-    --wallet=*)  WALLET="${1#*=}"; shift ;;
+    --code)      CODE="${2:-}"; shift 2 ;;
+    --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
     --agents=*)  AGENTS="${1#*=}"; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
@@ -80,7 +83,7 @@ done
 
 [ -n "$ENDPOINT" ] || ENDPOINT="$DEFAULT_ENDPOINT"
 if [ -z "$INSTALL_DIR" ]; then
-  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tryprompt"
+  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
 
 # --------------------------------------------------------------- prerequisites
@@ -94,7 +97,7 @@ NODE_BIN=$(command -v node)
 
 # ------------------------------------------------------------------- uninstall
 if [ "$UNINSTALL" -eq 1 ]; then
-  say "${B}Removing tryprompt.cash${R}"
+  say "${B}Removing prmpt.click${R}"
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
@@ -120,18 +123,19 @@ if [ "$UNINSTALL" -eq 1 ]; then
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
     ' "$f" 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
   done
-  for f in "$HOME/.config/amp/plugins/adengine.ts" "./.amp/plugins/adengine.ts"; do
+  for f in "$HOME/.config/amp/plugins/prmpt.ts" "./.amp/plugins/prmpt.ts"; do
     [ -f "$f" ] && rm -f "$f" && ok "removed $f"
   done
   [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR" && ok "removed $INSTALL_DIR"
   say ""
-  say "Your API key at ${D}~/.config/adengine/config.json${R} was left alone."
-  say "Delete it too if you want to unlink the wallet completely."
+  say "Your token at ${D}~/.config/prmpt/config.json${R} was left alone."
+  say "Delete it too to stop this install serving. Note that deleting it does"
+  say "not revoke the token: nothing can, and it stays valid until it expires."
   exit 0
 fi
 
 # ------------------------------------------------------------------ get source
-say "${B}tryprompt.cash${R}"
+say "${B}prmpt.click${R}"
 say ""
 
 # Running from a checkout? Use it. Otherwise fetch.
@@ -140,7 +144,7 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/hooks/turn-end.mjs" ]; then
   if [ "$SELF_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
     # -R over cp -a: BusyBox cp has no -a.
-    (cd "$SELF_DIR" && tar cf - hooks amp codex gemini .claude-plugin package.json README.md 2>/dev/null) \
+    (cd "$SELF_DIR" && tar cf - hooks amp codex gemini .claude-plugin package.json README.md install.sh 2>/dev/null) \
       | (cd "$INSTALL_DIR" && tar xf -)
     ok "installed from this checkout to $INSTALL_DIR"
   else
@@ -181,18 +185,19 @@ fi
 HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
-# -------------------------------------------------------------------- register
+# ------------------------------------------------------------------------ link
 say ""
-if [ -n "$WALLET" ]; then
-  say "${B}Registering your wallet${R}"
-  ADENGINE_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/register.mjs" "$WALLET" \
-    || die "registration failed -- nothing was wired up. Fix the above and re-run."
+if [ -n "$CODE" ]; then
+  say "${B}Linking this install${R}"
+  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/link.mjs" "$CODE" \
+    || die "linking failed -- nothing was wired up. Fix the above and re-run."
 else
-  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/adengine/config.json" ]; then
-    skip "already registered (${D}~/.config/adengine/config.json${R})"
+  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
+    skip "already linked (${D}~/.config/prmpt/config.json${R})"
   else
-    warn "no --wallet given: the hook will stay silent until you register."
-    warn "run: node $INSTALL_DIR/hooks/register.mjs <solana-address>"
+    warn "no --code given: the hook will stay silent until you link it."
+    warn "sign in with your wallet in the dashboard, mint an install code, then run:"
+    warn "  node $INSTALL_DIR/hooks/link.mjs <install-code>"
   fi
 fi
 
@@ -231,7 +236,7 @@ merge_hook() {
     // it under "Application Support" and Windows under "C:/Users/Jane Smith".
     // An unquoted path there produces a config that parses and never runs.
     const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
-    if (matcher) entry.name = "tryprompt";
+    if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
@@ -281,9 +286,9 @@ else skip "Gemini CLI not found"; fi
 
 # Amp -- a TypeScript plugin, not a hook. Unverified against a live install.
 if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || [ -d "$HOME/.config/amp" ]; }; }; then
-  if [ -f "$INSTALL_DIR/amp/adengine.ts" ]; then
-    mkdir -p "$AMP_DIR" && cp "$INSTALL_DIR/amp/adengine.ts" "$AMP_DIR/adengine.ts"
-    ok "Amp          $AMP_DIR/adengine.ts  ${D}(agent.end, unverified)${R}"
+  if [ -f "$INSTALL_DIR/amp/prmpt.ts" ]; then
+    mkdir -p "$AMP_DIR" && cp "$INSTALL_DIR/amp/prmpt.ts" "$AMP_DIR/prmpt.ts"
+    ok "Amp          $AMP_DIR/prmpt.ts  ${D}(agent.end, unverified)${R}"
     CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Amp not found"; fi
@@ -297,7 +302,7 @@ if [ "$CONFIGURED" -eq 0 ]; then
 fi
 
 if [ "$ENDPOINT" != "$DEFAULT_ENDPOINT" ]; then
-  say "${Y}note${R} endpoint is $ENDPOINT -- export ADENGINE_ENDPOINT to match in your shell."
+  say "${Y}note${R} endpoint is $ENDPOINT -- export PRMPT_ENDPOINT to match in your shell."
 fi
 
 say "${B}Done.${R} $CONFIGURED agent(s) configured."
@@ -306,5 +311,10 @@ say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
 say ""
-say "  ${D}Turn it off:${R}  export ADENGINE_DISABLED=1"
-say "  ${D}Remove it:${R}    $0 --uninstall"
+say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
+if [ -f "$INSTALL_DIR/install.sh" ]; then
+  say "  ${D}Remove it:${R}    $INSTALL_DIR/install.sh --uninstall"
+else
+  # $0 is "sh" when this was piped from curl, so it is not a runnable path.
+  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.click/install.sh | sh -s -- --uninstall"
+fi
