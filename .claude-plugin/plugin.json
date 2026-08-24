@@ -4,9 +4,9 @@
   "description": "Surfaces a single, clearly-labelled sponsored line at the end of an agent turn and pays the developer 70% of the click price in USDC on Solana.",
   "author": {
     "name": "tryprompt.cash",
-    "url": "https://tryprompt.cash"
+    "url": "https://prmpt.click"
   },
-  "homepage": "https://github.com/senamakel/tryprompt.cash",
+  "homepage": "https://github.com/senamakel/prmpt.click",
   "license": "MIT",
   "keywords": [
     "ads",
@@ -16,5 +16,5 @@
     "usdc"
   ],
   "hooks": "./hooks/hooks.json",
-  "repository": "https://github.com/senamakel/tryprompt.cash"
+  "repository": "https://github.com/senamakel/prmpt.click"
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
-# tryprompt.cash -- one installer for every supported coding agent.
+# prmpt.click -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://tryprompt.cash/install.sh | sh -s -- --wallet <solana-address>
+#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --wallet <solana-address>
 #
 # Or, from a checkout:  ./install.sh --wallet <solana-address>
 #
@@ -18,8 +18,8 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_URL="https://github.com/senamakel/tryprompt.cash.git"
-TARBALL_URL="https://codeload.github.com/senamakel/tryprompt.cash/tar.gz/refs/heads/main"
+REPO_URL="https://github.com/senamakel/prmpt.click.git"
+TARBALL_URL="https://codeload.github.com/senamakel/prmpt.click/tar.gz/refs/heads/main"
 DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
 
 WALLET=""
@@ -44,7 +44,7 @@ die()  { printf '%serror:%s %s\n' "$E" "$R" "$*" >&2; exit 1; }
 
 usage() {
   cat <<USAGE
-${B}tryprompt.cash installer${R}
+${B}prmpt.click installer${R}
 
   --wallet <address>   Solana address that receives payouts (base58, 32-44 chars)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
@@ -80,7 +80,7 @@ done
 
 [ -n "$ENDPOINT" ] || ENDPOINT="$DEFAULT_ENDPOINT"
 if [ -z "$INSTALL_DIR" ]; then
-  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tryprompt"
+  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
 
 # --------------------------------------------------------------- prerequisites
@@ -94,7 +94,7 @@ NODE_BIN=$(command -v node)
 
 # ------------------------------------------------------------------- uninstall
 if [ "$UNINSTALL" -eq 1 ]; then
-  say "${B}Removing tryprompt.cash${R}"
+  say "${B}Removing prmpt.click${R}"
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
@@ -131,7 +131,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 # ------------------------------------------------------------------ get source
-say "${B}tryprompt.cash${R}"
+say "${B}prmpt.click${R}"
 say ""
 
 # Running from a checkout? Use it. Otherwise fetch.

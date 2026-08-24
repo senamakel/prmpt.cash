@@ -1,4 +1,4 @@
-# tryprompt.cash
+# prmpt.click
 
 **Get paid for using your coding agent.**
 
@@ -15,7 +15,7 @@ Gemini CLI and Amp.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/senamakel/tryprompt.cash/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/senamakel/prmpt.click/main/install.sh \
   | sh -s -- --wallet <your-solana-address>
 ```
 
@@ -26,8 +26,8 @@ agent and carry on working.
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
 
 ```sh
-git clone https://github.com/senamakel/tryprompt.cash
-./tryprompt.cash/install.sh --wallet <your-solana-address>
+git clone https://github.com/senamakel/prmpt.click
+./prmpt.click/install.sh --wallet <your-solana-address>
 ```
 
 <details>
@@ -37,7 +37,7 @@ git clone https://github.com/senamakel/tryprompt.cash
 --wallet <address>   Solana address that receives payouts
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
---dir <path>         where to install (default: $XDG_DATA_HOME/tryprompt)
+--dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
 --project            configure ./ instead of your home directory
 --uninstall          remove the hooks and the installed copy
 ```
@@ -65,7 +65,7 @@ travels only in the `Authorization: Bearer` header of the serve request.
 Register later, or re-point an existing install:
 
 ```sh
-node ~/.local/share/tryprompt/hooks/register.mjs <your-solana-address>
+node ~/.local/share/prmpt/hooks/register.mjs <your-solana-address>
 ```
 
 ## What it looks like
@@ -73,7 +73,7 @@ node ~/.local/share/tryprompt/hooks/register.mjs <your-solana-address>
 ```
 Sponsored · Stop re-running flaky tests until green
 Quarantine detects flaky tests from your CI history and isolates them
-https://api.tryprompt.cash/c/9f2a41
+https://prmpt.click/7q
 ```
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
@@ -143,7 +143,7 @@ export ADENGINE_ENDPOINT=http://localhost:8080/graphql
 ## Uninstall
 
 ```sh
-~/.local/share/tryprompt/install.sh --uninstall
+~/.local/share/prmpt/install.sh --uninstall
 ```
 
 Your hook entries are removed and each touched config is backed up next to
