@@ -33,11 +33,16 @@ export const LONG_TURN =
  * Tests point HOME and XDG_CONFIG_HOME at one of these so a developer's real
  * ~/.config/adengine/config.json is never read and never written.
  */
+const scratch = [];
+process.on('exit', () => {
+  for (const dir of scratch) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+});
+
 export function tmpDir(prefix = 'adengine-test-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  process.on('exit', () => {
-    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
-  });
+  scratch.push(dir);
   return dir;
 }
 
