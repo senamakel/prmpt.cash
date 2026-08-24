@@ -14,10 +14,18 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
   }
 }`;
 
+// installId lives on the nested `publisher`, not on the payload. Asking for it
+// at the top level is a VALIDATION error, so the request fails with HTTP 422
+// before a response body exists -- which the tolerant parsing below can do
+// nothing about, because it never runs. Registration was impossible until this
+// matched the schema.
 const REGISTER_PUBLISHER = `mutation RegisterPublisher($solanaWallet: String!) {
   registerPublisher(solanaWallet: $solanaWallet) {
-    installId
     apiKey
+    publisher {
+      installId
+      solanaWallet
+    }
   }
 }`;
 

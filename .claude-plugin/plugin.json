@@ -3,11 +3,18 @@
   "version": "0.1.0",
   "description": "Surfaces a single, clearly-labelled sponsored line at the end of an agent turn and pays the developer 70% of the click price in USDC on Solana.",
   "author": {
-    "name": "Ad Engine",
-    "url": "https://github.com/adengine/adengine"
+    "name": "tryprompt.cash",
+    "url": "https://tryprompt.cash"
   },
-  "homepage": "https://github.com/adengine/adengine/tree/main/plugin",
+  "homepage": "https://github.com/senamakel/tryprompt.cash",
   "license": "MIT",
-  "keywords": ["ads", "sponsorship", "monetization", "solana", "usdc"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": [
+    "ads",
+    "sponsorship",
+    "monetization",
+    "solana",
+    "usdc"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "repository": "https://github.com/senamakel/tryprompt.cash"
 }

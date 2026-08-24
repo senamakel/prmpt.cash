@@ -1,10 +1,14 @@
 {
-  "name": "adengine-plugin",
+  "name": "tryprompt",
   "version": "0.1.0",
-  "private": true,
-  "description": "End-of-turn sponsored-line hook for coding agents.",
+  "description": "End-of-turn sponsored-line hook for coding agents. Get paid in USDC when someone clicks.",
   "license": "MIT",
   "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/senamakel/tryprompt.cash.git" },
+  "homepage": "https://tryprompt.cash",
+  "bugs": { "url": "https://github.com/senamakel/tryprompt.cash/issues" },
+  "keywords": ["ads", "sponsorship", "monetization", "solana", "usdc", "claude-code", "codex", "gemini-cli", "amp"],
+  "engines": { "node": ">=18" },
   "scripts": {
     "test": "node --test test/*.test.mjs"
   }

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 is the floor the plugin claims to support, so it is tested, not
+        # assumed. The hook has no dependencies, so there is nothing to install.
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --test test/*.test.mjs
+
+  installer:
+    name: installer (shellcheck + end to end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh -n install.sh
+      - run: shellcheck -s sh install.sh || true
+      - name: install into a sandbox HOME, twice, then uninstall
+        run: |
+          set -eux
+          export HOME="$(mktemp -d)"
+          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
+          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
+          # Running twice must not stack duplicate hook entries.
+          n=$(grep -c 'turn-end.mjs' "$HOME/.claude/settings.json")
+          test "$n" -eq 1
+          ./install.sh --uninstall --dir "$HOME/app"
+          ! grep -q 'turn-end.mjs' "$HOME/.claude/settings.json"

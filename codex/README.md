@@ -64,7 +64,7 @@ Writes `~/.config/adengine/config.json` at mode 0600. See the [main README](../R
 ## Environment
 
 ```bash
-export ADENGINE_ENDPOINT="http://localhost:8080/graphql"   # optional, this is the default
+export ADENGINE_ENDPOINT="https://api.tryprompt.cash/graphql"   # optional, this is the default
 export ADENGINE_HARNESS="codex"                            # optional; auto-detected
 export ADENGINE_DISABLED=1                                 # turn serving off
 ```

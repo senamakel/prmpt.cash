@@ -55,7 +55,7 @@ Shared with every other host. See the [main README](../README.md).
 Gemini CLI inherits your shell environment:
 
 ```bash
-export ADENGINE_ENDPOINT="http://localhost:8080/graphql"   # optional, this is the default
+export ADENGINE_ENDPOINT="https://api.tryprompt.cash/graphql"   # optional, this is the default
 export ADENGINE_HARNESS="gemini-cli"                       # optional; auto-detected
 export ADENGINE_DISABLED=1                                 # turn serving off
 ```

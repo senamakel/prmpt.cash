@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+# Real environment files. .env.example is the template and is committed.
+.env
+.env.*
+!.env.example
