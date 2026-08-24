@@ -109,10 +109,28 @@ export function smokeEnv(home, extra = {}) {
   return env;
 }
 
-/** Spawn anything and collect exit code and both streams. */
+/**
+ * Spawn anything and collect exit code and both streams.
+ *
+ * The deadline is enforced here rather than by spawn's own `timeout`. With
+ * `shell: true` Node's timeout kills the shell, not the program the shell
+ * started, so the pipes stay open, `close` never fires, and the promise hangs
+ * for as long as the CI job is allowed to run. On Windows the whole process
+ * TREE has to go, which is what taskkill /T is for. A timed-out call resolves
+ * with `timedOut: true` and a non-zero code so a test fails saying what hung.
+ */
 export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 180_000, shell = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], timeout, shell });
+    const child = spawn(command, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], shell });
+    let timedOut = false;
+    const killer = setTimeout(() => {
+      timedOut = true;
+      if (IS_WINDOWS && child.pid) {
+        try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']); } catch { /* already gone */ }
+      }
+      child.kill('SIGKILL');
+    }, timeout);
+    if (typeof killer.unref === 'function') killer.unref();
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -123,8 +141,12 @@ export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 18
     // resulting EPIPE is not a test failure.
     child.stdin.on('error', () => {});
     child.stdin.end(stdin ?? '');
-    child.on('error', reject);
-    child.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
+    child.on('error', (err) => { clearTimeout(killer); reject(err); });
+    child.on('close', (code, signal) => {
+      clearTimeout(killer);
+      if (timedOut) stderr += `\n[smoke] killed after ${timeout}ms: ${command}`;
+      resolve({ code: timedOut ? (code ?? 124) : code, signal, stdout, stderr, timedOut });
+    });
   });
 }
 

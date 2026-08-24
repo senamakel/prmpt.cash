@@ -34,6 +34,9 @@ jobs:
   install:
     name: install · ${{ matrix.os }} · node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
+    # A hung agent CLI is a real failure mode -- `claude doctor` sat for 79
+    # minutes on a Windows runner once. Fail in twenty, do not burn six hours.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +78,7 @@ jobs:
   agents:
     name: agents · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

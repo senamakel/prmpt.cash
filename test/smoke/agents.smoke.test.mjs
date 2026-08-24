@@ -133,7 +133,7 @@ test('autodetection wires up exactly the agents that are installed', async () =>
   }
 });
 
-test('Claude Code reads the settings file we wrote without complaining', { skip: !CLAUDE && 'claude not installed' }, async () => {
+test('Claude Code reads the settings file we wrote without complaining', { skip: !CLAUDE && 'claude not installed' }, async (t) => {
   const box = sandbox();
   const project = path.join(box.home, 'project');
   fs.mkdirSync(project, { recursive: true });
@@ -146,7 +146,16 @@ test('Claude Code reads the settings file we wrote without complaining', { skip:
   const res = await execTool('claude', ['doctor'], {
     env: { ...process.env, HOME: box.home, USERPROFILE: box.home },
     cwd: project,
+    timeout: 60_000,
   });
+  if (res.timedOut) {
+    // `claude doctor` probes the network as part of its checkup, and on a
+    // Windows runner it sat there for 79 minutes before the job was cancelled.
+    // A hang is not an objection to our settings, so this is inconclusive
+    // rather than a failure -- and saying so beats a silent pass.
+    t.skip('claude doctor did not return within 60s on this platform');
+    return;
+  }
   const output = `${res.stdout}\n${res.stderr}`;
   assert.ok(
     !/(invalid|malformed|failed to parse|could not parse).{0,40}settings/i.test(output),
