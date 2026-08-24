@@ -96,7 +96,7 @@ test('the printed confirmation masks the key rather than echoing it', async () =
 
   assert.ok(!res.stdout.includes(MINTED_KEY), 'the full API key must never be printed');
   assert.ok(!res.stderr.includes(MINTED_KEY));
-  assert.match(res.stdout, /api key:\s+ak_l\*+Alue/);
+  assert.match(res.stdout, /api key:\s+ak_l\*+alue/);
   assert.match(res.stdout, /\(stored, not shown\)/);
   assert.ok(res.stdout.includes(GOOD_WALLET), 'the wallet is public and is shown');
   // Only the first and last four characters of the key ever appear.
