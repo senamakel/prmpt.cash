@@ -15,8 +15,7 @@ Gemini CLI and Amp.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/senamakel/prmpt.click/main/install.sh \
-  | sh -s -- --wallet <your-solana-address>
+curl -fsSL https://prmpt.click/install.sh | sh -s -- --wallet <your-solana-address>
 ```
 
 That detects the agents you have, wires each one up using *its own* documented
