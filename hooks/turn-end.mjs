@@ -142,6 +142,12 @@ function main() {
     }
     if (!payload || typeof payload !== 'object') return quiet();
 
+    // Codex fires `notify` for several event types; only the end of a turn is
+    // ours. Claude Code's Stop payload has no `type`, so an absent one passes.
+    if (typeof payload.type === 'string' && payload.type !== 'agent-turn-complete') {
+      return quiet();
+    }
+
     const config = loadConfig(payload);
 
     // No key or an explicit opt-out: do nothing, say nothing.

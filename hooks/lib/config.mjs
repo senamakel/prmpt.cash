@@ -64,7 +64,7 @@ export function resolveInstallId(cfg = readConfigFile()) {
  * changes across reboots.
  */
 export function resolveSessionId(payload = {}, cwd = process.cwd()) {
-  const direct = payload.session_id ?? payload.sessionId;
+  const direct = payload.session_id ?? payload.sessionId ?? payload['thread-id'];
   if (typeof direct === 'string' && direct.length > 0) return direct;
   const bootMs = Math.floor(Date.now() - os.uptime() * 1000);
   // Round to the nearest minute: os.uptime() has sub-second jitter that would
