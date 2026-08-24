@@ -86,6 +86,19 @@ On a turn that clears the length gate, exactly one POST containing:
 | `turnText` | The agent's own final reply, last ~4000 characters. |
 | `repoLanguage` | One word, e.g. `go`, inferred from a marker file in the working directory. |
 | `fileTypes` | A few extensions, e.g. `[".go"]`, inferred the same way. |
+| `harness` | Which coding agent is running, as one of `claude-code`, `codex`, `cursor`, `unknown`. |
+| `harnessVersion` | That agent's version string, e.g. `2.1.241`, when it exposes one. |
+| `model` | The model name the agent reported for the turn, when it exposes one. |
+
+**Your IP address.** Not sent by the plugin, but like any HTTP request it is visible to the server,
+which resolves it to an approximate location. **The IP itself is never stored** — only the country,
+region and city derived from it, and only in aggregate. See the privacy note on the public
+transparency dashboard.
+
+**What is published.** Harness and location feed the public dashboard at `/transparency`, but only
+as aggregates: any bucket with fewer than a handful of impressions is suppressed, so no row can be
+traced back to one developer. Nothing identifying you — install id, session id, wallet, turn text —
+is ever public.
 
 **What never leaves:** the contents of any file, file paths, your prompts, the agent's reasoning or
 thinking blocks, tool calls and their output, environment variables, git remotes, or your API key.
