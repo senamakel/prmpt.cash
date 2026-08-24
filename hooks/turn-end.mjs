@@ -150,7 +150,13 @@ function main() {
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.
     let turnText = '';
-    for (const direct of [payload.last_assistant_message, payload.assistant_message, payload.turnText]) {
+    const directCandidates = [
+      payload['last-assistant-message'], // Codex notify, agent-turn-complete
+      payload.last_assistant_message,
+      payload.assistant_message,
+      payload.turnText,
+    ];
+    for (const direct of directCandidates) {
       if (typeof direct === 'string' && direct.trim()) {
         turnText = direct.trim();
         break;
