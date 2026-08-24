@@ -140,7 +140,7 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/hooks/turn-end.mjs" ]; then
   if [ "$SELF_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
     # -R over cp -a: BusyBox cp has no -a.
-    (cd "$SELF_DIR" && tar cf - hooks amp codex gemini .claude-plugin package.json README.md 2>/dev/null) \
+    (cd "$SELF_DIR" && tar cf - hooks amp codex gemini .claude-plugin package.json README.md install.sh 2>/dev/null) \
       | (cd "$INSTALL_DIR" && tar xf -)
     ok "installed from this checkout to $INSTALL_DIR"
   else
@@ -295,4 +295,9 @@ say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
 say ""
 say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
-say "  ${D}Remove it:${R}    $0 --uninstall"
+if [ -f "$INSTALL_DIR/install.sh" ]; then
+  say "  ${D}Remove it:${R}    $INSTALL_DIR/install.sh --uninstall"
+else
+  # $0 is "sh" when this was piped from curl, so it is not a runnable path.
+  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.click/install.sh | sh -s -- --uninstall"
+fi
