@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 // The hosted engine. Override with ADENGINE_ENDPOINT to point at your own
 // deployment, or at http://localhost:8080/graphql when running the backend
 // locally.
-export const DEFAULT_ENDPOINT = 'https://api.tryprompt.cash/graphql';
+export const DEFAULT_ENDPOINT = 'https://api.prmpt.click/graphql';
 
 /** ~/.config/adengine, honouring XDG_CONFIG_HOME. */
 export function configDir() {

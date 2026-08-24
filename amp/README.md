@@ -22,7 +22,7 @@ Then export your key (Amp inherits your shell environment):
 
 ```bash
 export ADENGINE_API_KEY="pub_..."
-export ADENGINE_ENDPOINT="https://api.tryprompt.cash/graphql"   # optional, this is the default
+export ADENGINE_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
 export ADENGINE_INSTALL_ID="..."                           # from register.mjs
 export ADENGINE_DISABLED=1                                 # turn serving off
 ```

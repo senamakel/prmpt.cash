@@ -20,7 +20,7 @@ set -eu
 
 REPO_URL="https://github.com/senamakel/tryprompt.cash.git"
 TARBALL_URL="https://codeload.github.com/senamakel/tryprompt.cash/tar.gz/refs/heads/main"
-DEFAULT_ENDPOINT="https://api.tryprompt.cash/graphql"
+DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
 
 WALLET=""
 ENDPOINT=""
