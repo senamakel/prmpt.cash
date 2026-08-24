@@ -48,9 +48,28 @@ function readStdin() {
     });
     process.stdin.on('end', finish);
     process.stdin.on('error', finish);
-    const t = setTimeout(finish, 1000);
+    // Kept short deliberately: this timer and the request deadline are
+    // consecutive, so a host that opens stdin and never closes it would
+    // otherwise push the worst case to 1000 + 1500 = 2.5s. Gemini CLI runs
+    // hooks synchronously inside the agent loop, so the ceiling is user-visible.
+    const t = setTimeout(finish, 250);
     if (typeof t.unref === 'function') t.unref();
   });
+}
+
+/**
+ * Is this user-role entry a real prompt, rather than a tool result?
+ *
+ * Claude Code records tool results as user-role entries whose content blocks
+ * are `tool_result`. Only an entry carrying actual text is the human speaking.
+ */
+function isUserPrompt(entry) {
+  const content = entry?.message?.content ?? entry?.content;
+  if (typeof content === 'string') return content.trim().length > 0;
+  if (!Array.isArray(content)) return false;
+  return content.some(
+    (b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim(),
+  );
 }
 
 /** Concatenate the `text` blocks of one transcript message. */
@@ -99,10 +118,22 @@ function finalAssistantText(transcriptPath) {
         continue;
       }
       const role = entry?.message?.role ?? entry?.role;
+
+      // Stop at the user's PROMPT, which is what starts the turn. Tool results
+      // are also recorded as user-role entries, so breaking on any user entry
+      // ended the walk at the first tool result and returned nothing — a turn
+      // that used tools then answered would silently serve no ad at all.
+      if (role === 'user' || entry?.type === 'user') {
+        if (isUserPrompt(entry)) break;
+        continue;
+      }
+      if (role !== 'assistant') continue;
+
+      // Only take the version/model actually reported by an assistant entry of
+      // this turn, so a neighbouring record cannot contribute them.
       if (!version && typeof entry?.version === 'string') version = entry.version;
       if (!model && typeof entry?.message?.model === 'string') model = entry.message.model;
-      if (role === 'user' || entry?.type === 'user') break;
-      if (role !== 'assistant') continue;
+
       const text = textOfMessage(entry.message ?? entry);
       if (text) parts.push(text);
     }
