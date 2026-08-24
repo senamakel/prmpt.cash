@@ -234,7 +234,7 @@ function main() {
     const config = loadConfig(payload);
 
     // No key or an explicit opt-out: do nothing, say nothing.
-    if (config.disabled || !config.apiKey) return quiet();
+    if (config.disabled || !config.token) return quiet();
 
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.

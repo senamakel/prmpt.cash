@@ -7,7 +7,7 @@
 
     1. checks Node >= 18            (the hook is plain ESM, no dependencies)
     2. copies the plugin to a stable directory
-    3. registers your wallet and stores the API key
+    3. redeems your install code and stores the token
     4. wires up every agent it finds, using that agent's own documented hook
 
   Idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -21,20 +21,20 @@
   exactly the wrong tool here.
 
 .EXAMPLE
-  .\install.ps1 -Wallet 7xKX...gAsU
+  .\install.ps1 -Code K3H9F-2QPRS
 
 .EXAMPLE
-  # Piping from the web cannot take parameters, so pass the wallet by
+  # Piping from the web cannot take parameters, so pass the code by
   # environment variable:
-  $env:PRMPT_WALLET = "7xKX...gAsU"; irm https://prmpt.click/install.ps1 | iex
+  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.click/install.ps1 | iex
 
 .EXAMPLE
   # Or run it as a scriptblock, which can:
-  & ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Wallet 7xKX...gAsU
+  & ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Code K3H9F-2QPRS
 #>
 [CmdletBinding()]
 param(
-  [string] $Wallet   = $env:PRMPT_WALLET,
+  [string] $Code     = $env:PRMPT_CODE,
   [string] $Agents   = $env:PRMPT_AGENTS,
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
@@ -153,8 +153,9 @@ if ($Uninstall) {
   }
   if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir; Write-Ok "removed $Dir" }
   Write-Host ''
-  Write-Host "Your API key at $env:USERPROFILE\.config\prmpt\config.json was left alone."
-  Write-Host 'Delete it too if you want to unlink the wallet completely.'
+  Write-Host "Your token at $env:USERPROFILE\.config\prmpt\config.json was left alone."
+  Write-Host 'Delete it too to stop this install serving. Deleting it does not'
+  Write-Host 'revoke the token: nothing can, and it stays valid until it expires.'
   exit 0
 }
 
@@ -203,19 +204,20 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
 $Hook = Join-Path $Dir 'hooks\turn-end.mjs'
 if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install did not complete." }
 
-# -------------------------------------------------------------------- register
+# ------------------------------------------------------------------------ link
 Write-Host ''
 $cfgFile = Join-Path $Home_ '.config\prmpt\config.json'
-if ($Wallet) {
-  Write-Host 'Registering your wallet' -ForegroundColor White
+if ($Code) {
+  Write-Host 'Linking this install' -ForegroundColor White
   $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin (Join-Path $Dir 'hooks\register.mjs') $Wallet
-  if ($LASTEXITCODE -ne 0) { Die 'registration failed -- nothing was wired up. Fix the above and re-run.' }
+  & $NodeBin (Join-Path $Dir 'hooks\link.mjs') $Code
+  if ($LASTEXITCODE -ne 0) { Die 'linking failed -- nothing was wired up. Fix the above and re-run.' }
 } elseif (Test-Path $cfgFile) {
-  Write-Skip 'already registered'
+  Write-Skip 'already linked'
 } else {
-  Write-Warn 'no -Wallet given: the hook will stay silent until you register.'
-  Write-Warn "run: node $Dir\hooks\register.mjs <solana-address>"
+  Write-Warn 'no -Code given: the hook will stay silent until you link it.'
+  Write-Warn 'sign in with your wallet in the dashboard, mint an install code, then run:'
+  Write-Warn "  node $Dir\hooks\link.mjs <install-code>"
 }
 
 # ----------------------------------------------------------------- wire agents

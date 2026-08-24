@@ -17,38 +17,41 @@ Gemini CLI and Amp.
 **macOS / Linux**
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh -s -- --wallet <your-solana-address>
+curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-$env:PRMPT_WALLET = "<your-solana-address>"; irm https://prmpt.click/install.ps1 | iex
+$env:PRMPT_CODE = "<install-code>"; irm https://prmpt.click/install.ps1 | iex
 ```
 
 A piped script cannot take parameters, hence the environment variable. To pass
 them properly, run it as a scriptblock instead:
 
 ```powershell
-& ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Wallet <your-solana-address>
+& ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Code <install-code>
 ```
 
 That detects the agents you have, wires each one up using *its own* documented
-hook, registers your wallet, and stores the API key at mode 0600. Restart your
-agent and carry on working.
+hook, redeems your install code, and stores the resulting token at mode 0600.
+Restart your agent and carry on working.
+
+Get the code from the dashboard: sign in with your wallet, then choose "Link a
+plugin install". It works once and expires in ten minutes.
 
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
 
 ```sh
 git clone https://github.com/senamakel/prmpt.click
-./prmpt.click/install.sh --wallet <your-solana-address>
+./prmpt.click/install.sh --code <install-code>
 ```
 
 <details>
 <summary>Options</summary>
 
 ```
---wallet <address>   Solana address that receives payouts
+--code <code>        one-off install code from the dashboard
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -62,25 +65,33 @@ than appending, so you cannot end up with duplicates.
 
 ## Getting paid
 
-Any wallet that can hold an SPL token works: Phantom, Solflare, Backpack, a CLI
-keypair. Copy the **public** address (base58, 32–44 characters).
+Any wallet that can hold an SPL token works: Phantom, Solflare, Backpack.
 
-The address is validated locally before anything is registered, so a typo fails
-before it can be bound to a key. On success:
+Your wallet **signs** a one-line message in the dashboard to prove it is yours.
+It authorises no transaction and moves no funds. That signature is what binds
+the address to your account — before it existed, an address was merely typed in,
+so anyone could have claimed yours and been paid into it.
+
+A terminal cannot open a wallet prompt, which is why the browser hands you a
+one-off code instead and the plugin redeems that:
+
+```sh
+node ~/.local/share/prmpt/hooks/link.mjs <install-code>
+```
+
+The code works once and expires in ten minutes. On success:
 
 ```
 ~/.config/prmpt/config.json          mode 0600
-{ "installId": …, "apiKey": …, "endpoint": …, "solanaWallet": … }
+{ "installId": …, "token": …, "endpoint": …, "solanaWallet": … }
 ```
 
-The key is never echoed, never logged, and never appears in hook output — it
+The token is never echoed, never logged, and never appears in hook output — it
 travels only in the `Authorization: Bearer` header of the serve request.
 
-Register later, or re-point an existing install:
-
-```sh
-node ~/.local/share/prmpt/hooks/register.mjs <your-solana-address>
-```
+It is also long-lived and **cannot be revoked**: it stays valid until it
+expires, so treat that config file as the credential it is. Deleting it stops
+this install serving; it does not invalidate a copy taken beforehand.
 
 ## What it looks like
 
@@ -168,8 +179,10 @@ export PRMPT_ENDPOINT=http://localhost:8080/graphql
 ```
 
 Your hook entries are removed and each touched config is backed up next to
-itself as `.bak`. The API key at `~/.config/prmpt/config.json` is left alone —
-delete it too to unlink the wallet completely.
+itself as `.bak`. The token at `~/.config/prmpt/config.json` is left alone —
+delete it too to stop this install serving. Note that deleting it does not
+revoke the token: nothing can, and a copy taken beforehand keeps working until
+it expires.
 
 ## License
 

@@ -21,16 +21,16 @@ cp /absolute/path/to/prmpt/plugin/amp/prmpt.ts ~/.config/amp/plugins/prmpt.ts
 Then export your key (Amp inherits your shell environment):
 
 ```bash
-export PRMPT_API_KEY="pub_..."
+export PRMPT_TOKEN="eyJhbGciOi..."
 export PRMPT_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
-export PRMPT_INSTALL_ID="..."                           # from register.mjs
+export PRMPT_INSTALL_ID="..."                           # from link.mjs
 export PRMPT_DISABLED=1                                 # turn serving off
 ```
 
 Get the key and install id the same way as every other host:
 
 ```bash
-node /absolute/path/to/prmpt/plugin/hooks/register.mjs <your-solana-address>
+node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
 ```
 
 ## How it works

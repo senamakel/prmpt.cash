@@ -18,7 +18,7 @@
 import type { PluginAPI } from '@ampcode/plugin'
 
 const ENDPOINT = process.env.PRMPT_ENDPOINT ?? 'https://api.prmpt.click/graphql'
-const API_KEY = process.env.PRMPT_API_KEY ?? ''
+const TOKEN = process.env.PRMPT_TOKEN ?? process.env.PRMPT_API_KEY ?? ''
 const TIMEOUT_MS = 1500
 const MIN_TURN_CHARS = 80
 const MAX_TURN_CHARS = 4000
@@ -53,7 +53,7 @@ export default function (amp: PluginAPI) {
   amp.on('agent.end', async (event, ctx) => {
     // Fail-open and silent is the whole contract: never interrupt a session.
     try {
-      if (!API_KEY || process.env.PRMPT_DISABLED === '1') return
+      if (!TOKEN || process.env.PRMPT_DISABLED === '1') return
       if (event.status !== 'done') return
 
       let turnText = finalAssistantText((event as { messages?: unknown }).messages)
@@ -64,7 +64,7 @@ export default function (amp: PluginAPI) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${TOKEN}`,
         },
         body: JSON.stringify({
           query: SERVE_AD,

@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import {
   LONG_TURN,
-  TEST_API_KEY,
+  TEST_TOKEN,
   assertNoKeyLeak,
   assistantEntry,
   baseEnv,
@@ -33,7 +33,7 @@ async function serve({ payload, argv = false, env = {} } = {}) {
       args: argv ? [JSON.stringify(payload)] : [],
       stdin: argv ? '' : JSON.stringify(payload),
       env: baseEnv({
-        PRMPT_API_KEY: TEST_API_KEY,
+        PRMPT_TOKEN: TEST_TOKEN,
         PRMPT_ENDPOINT: server.url,
         ...env,
       }),
@@ -194,7 +194,7 @@ test('Codex notify: a non-turn notify type is ignored entirely', async () => {
   try {
     const res = await runHook({
       args: [JSON.stringify({ type: 'agent-something-else', 'last-assistant-message': LONG_TURN })],
-      env: baseEnv({ PRMPT_API_KEY: TEST_API_KEY, PRMPT_ENDPOINT: server.url }),
+      env: baseEnv({ PRMPT_TOKEN: TEST_TOKEN, PRMPT_ENDPOINT: server.url }),
     });
     assert.equal(res.code, 0);
     assert.equal(res.stdout, '');

@@ -85,8 +85,13 @@ export function loadConfig(payload = {}) {
   const cfg = readConfigFile();
   const cwd = (typeof payload.cwd === 'string' && payload.cwd) || process.cwd();
 
-  const envKey = process.env.PRMPT_API_KEY;
-  const apiKey = (envKey && envKey.trim()) || (typeof cfg.apiKey === 'string' ? cfg.apiKey.trim() : '');
+  // PRMPT_TOKEN is the current name. PRMPT_API_KEY is still read so an install
+  // that predates JWT auth keeps starting -- the value it holds is a retired
+  // API key that the backend no longer accepts, so serving simply gets no ad
+  // until the install is re-linked, which is the correct failure.
+  const envToken = process.env.PRMPT_TOKEN || process.env.PRMPT_API_KEY;
+  const token =
+    (envToken && envToken.trim()) || (typeof cfg.token === 'string' ? cfg.token.trim() : '');
 
   const envEndpoint = process.env.PRMPT_ENDPOINT;
   const endpoint =
@@ -97,7 +102,7 @@ export function loadConfig(payload = {}) {
   const timeoutMs = Number.parseInt(process.env.PRMPT_TIMEOUT_MS ?? '', 10);
 
   return {
-    apiKey,
+    token,
     endpoint,
     cwd,
     installId: resolveInstallId(cfg),

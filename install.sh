@@ -1,14 +1,14 @@
 #!/bin/sh
 # prmpt.click -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --wallet <solana-address>
+#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
 #
-# Or, from a checkout:  ./install.sh --wallet <solana-address>
+# Or, from a checkout:  ./install.sh --code <install-code>
 #
 # What it does, in order:
 #   1. checks Node >= 18                (the hook is plain ESM, no dependencies)
 #   2. copies the plugin to a stable directory
-#   3. registers your wallet and stores the API key at mode 0600
+#   3. redeems your install code and stores the token at mode 0600
 #   4. wires up every agent it finds, using that agent's own documented hook
 #
 # It is idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -22,7 +22,7 @@ REPO_URL="https://github.com/senamakel/prmpt.click.git"
 TARBALL_URL="https://codeload.github.com/senamakel/prmpt.click/tar.gz/refs/heads/main"
 DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
 
-WALLET=""
+CODE=""
 ENDPOINT=""
 AGENTS=""
 UNINSTALL=0
@@ -46,7 +46,7 @@ usage() {
   cat <<USAGE
 ${B}prmpt.click installer${R}
 
-  --wallet <address>   Solana address that receives payouts (base58, 32-44 chars)
+  --code <code>        One-off install code from the dashboard (10 chars)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
@@ -54,17 +54,20 @@ ${B}prmpt.click installer${R}
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
-Run with no --wallet to install and wire up the agents without registering;
+Your wallet is proven by signature in the dashboard, which is the only place a
+wallet prompt can open. It hands you a one-off code; this passes it on.
+
+Run with no --code to install and wire up the agents without linking;
 you can register later with:
 
-  node <install-dir>/hooks/register.mjs <solana-address>
+  node <install-dir>/hooks/link.mjs <install-code>
 USAGE
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --wallet)    WALLET="${2:-}"; shift 2 ;;
-    --wallet=*)  WALLET="${1#*=}"; shift ;;
+    --code)      CODE="${2:-}"; shift 2 ;;
+    --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
     --agents=*)  AGENTS="${1#*=}"; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
@@ -125,8 +128,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
   done
   [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR" && ok "removed $INSTALL_DIR"
   say ""
-  say "Your API key at ${D}~/.config/prmpt/config.json${R} was left alone."
-  say "Delete it too if you want to unlink the wallet completely."
+  say "Your token at ${D}~/.config/prmpt/config.json${R} was left alone."
+  say "Delete it too to stop this install serving. Note that deleting it does"
+  say "not revoke the token: nothing can, and it stays valid until it expires."
   exit 0
 fi
 
@@ -172,18 +176,19 @@ fi
 HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
-# -------------------------------------------------------------------- register
+# ------------------------------------------------------------------------ link
 say ""
-if [ -n "$WALLET" ]; then
-  say "${B}Registering your wallet${R}"
-  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/register.mjs" "$WALLET" \
-    || die "registration failed -- nothing was wired up. Fix the above and re-run."
+if [ -n "$CODE" ]; then
+  say "${B}Linking this install${R}"
+  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/link.mjs" "$CODE" \
+    || die "linking failed -- nothing was wired up. Fix the above and re-run."
 else
   if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
-    skip "already registered (${D}~/.config/prmpt/config.json${R})"
+    skip "already linked (${D}~/.config/prmpt/config.json${R})"
   else
-    warn "no --wallet given: the hook will stay silent until you register."
-    warn "run: node $INSTALL_DIR/hooks/register.mjs <solana-address>"
+    warn "no --code given: the hook will stay silent until you link it."
+    warn "sign in with your wallet in the dashboard, mint an install code, then run:"
+    warn "  node $INSTALL_DIR/hooks/link.mjs <install-code>"
   fi
 fi
 

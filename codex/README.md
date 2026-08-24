@@ -50,12 +50,12 @@ notify = ["node", "/absolute/path/to/prmpt/plugin/hooks/turn-end.mjs"]
 It reads `last-assistant-message` and `thread-id` from that payload instead. Prefer the `Stop` hook
 where you have it — `notify` has no documented channel for showing you the result.
 
-## Wallet setup
+## Linking your wallet
 
 Identical to every other host; the config file is shared:
 
 ```bash
-node /absolute/path/to/prmpt/plugin/hooks/register.mjs <your-solana-address>
+node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
 ```
 
 Writes `~/.config/prmpt/config.json` at mode 0600. See the [main README](../README.md) for the
