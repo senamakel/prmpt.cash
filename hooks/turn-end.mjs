@@ -109,10 +109,17 @@ function finalAssistantText(transcriptPath) {
   }
 }
 
-/** Collapse to a single line and clip to `max` characters. */
+/**
+ * Collapse to a single line and clip to `max` characters, breaking on a word
+ * boundary so a clipped line never ends mid-word.
+ */
 function oneLine(s, max) {
   const flat = s.replace(/\s+/g, ' ').trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  // Only honour the word boundary if it isn't so early that we lose the line.
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /**
@@ -121,8 +128,10 @@ function oneLine(s, max) {
  * something the agent said.
  */
 function renderLines(ad) {
+  // These limits mirror what the backend asks the model for -- a 70 char
+  // headline and a 140 char body -- so well-formed copy is never clipped.
   const lines = [`Sponsored · ${oneLine(ad.headline, 90)}`];
-  if (ad.body) lines.push(oneLine(ad.body, 100));
+  if (ad.body) lines.push(oneLine(ad.body, 140));
   lines.push(ad.clickUrl);
   return lines;
 }
