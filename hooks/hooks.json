@@ -1,0 +1,16 @@
+{
+  "description": "adengine end-of-turn sponsored slot",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/turn-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
