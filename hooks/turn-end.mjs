@@ -128,7 +128,12 @@ function renderLines(ad) {
 }
 
 function main() {
-  readStdin().then(async (raw) => {
+  readStdin().then(async (stdinRaw) => {
+    // Claude Code pipes the payload on stdin. Codex's `notify` program instead
+    // passes it as a single JSON argv. Accept whichever showed up.
+    const argvRaw = process.argv[2];
+    const raw = (stdinRaw && stdinRaw.trim()) || (typeof argvRaw === 'string' ? argvRaw : '');
+
     let payload = {};
     try {
       payload = raw ? JSON.parse(raw) : {};
