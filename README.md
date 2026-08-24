@@ -97,7 +97,7 @@ transparency dashboard.
 
 **What is published.** Harness and location feed the public dashboard at `/transparency`, but only
 as aggregates: any bucket with fewer than a handful of impressions is suppressed, so no row can be
-traced back to one developer. Nothing identifying you — install id, session id, wallet, turn text —
+traced back to one user. Nothing identifying you — install id, session id, wallet, turn text —
 is ever public.
 
 **What never leaves:** the contents of any file, file paths, your prompts, the agent's reasoning or
