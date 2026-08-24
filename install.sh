@@ -101,8 +101,8 @@ if [ "$UNINSTALL" -eq 1 ]; then
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
-    if "$NODE_BIN" -e '
-      const fs=require("fs"), p=process.argv[1];
+    if PRMPT_CFG="$f" "$NODE_BIN" -e '
+      const fs=require("fs"), p=process.env.PRMPT_CFG;
       let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
@@ -121,7 +121,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
       if (!hit) process.exit(2);
       fs.copyFileSync(p, p+".bak");
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-    ' "$f" 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
+    ' 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
   done
   for f in "$HOME/.config/amp/plugins/prmpt.ts" "./.amp/plugins/prmpt.ts"; do
     [ -f "$f" ] && rm -f "$f" && ok "removed $f"
@@ -212,13 +212,22 @@ merge_hook() {
   file="$1"; event="$2"; timeout="$3"; matcher="$4"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
+  # Values reach the program through the ENVIRONMENT, never argv. install.ps1
+  # runs the identical program, and PowerShell drops an empty-string argument to
+  # a native command outright -- Claude Code and Codex pass an empty matcher, so
+  # every later argument shifted by one and the hook path went missing. The
+  # environment preserves an empty value and needs no quoting on either side.
+  PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$HOOK" \
   "$NODE_BIN" -e '
     const fs=require("fs");
-    const [p,event,timeout,matcher,hook]=process.argv.slice(1);
+    const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
+    const timeout=process.env.PRMPT_TIMEOUT, matcher=process.env.PRMPT_MATCHER||"";
+    const hook=process.env.PRMPT_HOOK;
     let j={};
     // Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
-// them, and refusing to touch the file would leave the user silently unwired.
-const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
+    // them, and refusing to touch the file would leave the user silently unwired.
+    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
     if (raw) {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
@@ -242,7 +251,7 @@ const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").t
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-  ' "$file" "$event" "$timeout" "$matcher" "$HOOK"
+  '
 }
 
 want() {

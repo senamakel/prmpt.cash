@@ -212,6 +212,48 @@ test('a config written with a UTF-8 BOM is still merged into', async () => {
   assert.equal(ourEntries(config, 'Stop').length, 1, 'the hook was not merged in');
 });
 
+test('both installers embed the same JSON-merge program, character for character', () => {
+  // install.ps1 delegates every config edit to the same Node programs
+  // install.sh uses, so the one step that can corrupt somebody's agent config
+  // is written once rather than twice. Nothing enforced that, and they drifted
+  // twice in a single afternoon -- once over quoting, once over how the program
+  // reads its inputs. Each drift produced a Windows install that reported
+  // success and wired up nothing.
+  const sh = fs.readFileSync(path.join(PLUGIN_DIR, 'install.sh'), 'utf8');
+  const ps = fs.readFileSync(path.join(PLUGIN_DIR, 'install.ps1'), 'utf8');
+
+  /** The body of a `node -e '<program>'` in install.sh. */
+  const fromSh = (after) => {
+    const start = sh.indexOf("\"$NODE_BIN\" -e '", sh.indexOf(after));
+    assert.notEqual(start, -1, `install.sh: no node -e program after ${after}`);
+    const open = sh.indexOf('\n', start) + 1;
+    const close = sh.indexOf("\n", sh.indexOf("'", open));
+    return sh.slice(open, sh.lastIndexOf("'", close));
+  };
+
+  /** The body of a `$Name = @' ... '@` here-string in install.ps1. */
+  const fromPs = (name) => {
+    const open = ps.indexOf("\n", ps.indexOf(`$${name} = @'`)) + 1;
+    const close = ps.indexOf("\n'@", open);
+    assert.ok(open > 0 && close > open, `install.ps1: no here-string for $${name}`);
+    return ps.slice(open, close + 1);
+  };
+
+  // install.sh indents its programs inside a shell function; strip that.
+  const normalise = (s) => s.split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+
+  assert.equal(
+    normalise(fromPs('MergeJs')),
+    normalise(fromSh('merge_hook()')),
+    'the merge programs have drifted',
+  );
+  assert.equal(
+    normalise(fromPs('CleanJs')),
+    normalise(fromSh('Removing prmpt')),
+    'the uninstall programs have drifted',
+  );
+});
+
 test('a config that is not valid JSON is left completely alone', async () => {
   const box = sandbox();
   const file = hostConfigPath(box, HOSTS[0]);

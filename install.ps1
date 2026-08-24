@@ -90,7 +90,9 @@ if ($Project) {
 # The node programs are byte-for-byte the ones install.sh uses.
 $MergeJs = @'
 const fs=require("fs");
-const [p,event,timeout,matcher,hook]=process.argv.slice(1);
+const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
+const timeout=process.env.PRMPT_TIMEOUT, matcher=process.env.PRMPT_MATCHER||"";
+const hook=process.env.PRMPT_HOOK;
 let j={};
 // Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
 // them, and refusing to touch the file would leave the user silently unwired.
@@ -99,17 +101,20 @@ if (raw) {
   try { j=JSON.parse(raw); }
   catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
 }
+// Back up before the first modification, never after.
 if (raw) fs.copyFileSync(p, p+".bak");
+
 j.hooks = j.hooks || {};
 const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
+// Drop any previous entry of ours so re-running cannot stack duplicates.
 for (const g of groups) {
   if (Array.isArray(g.hooks)) {
     g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
   }
 }
-// Quoted, because a Windows install dir routinely contains a space --
-// "C:\Users\Jane Smith\AppData\Local\prmpt". An unquoted path there
-// produces a config that parses and a hook that never runs.
+// Quoted, because the install dir routinely contains a space: macOS puts
+// it under "Application Support" and Windows under "C:/Users/Jane Smith".
+// An unquoted path there produces a config that parses and never runs.
 const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
 if (matcher) entry.name = "prmpt";
 const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
@@ -118,7 +123,7 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 $CleanJs = @'
-const fs=require("fs"), p=process.argv[1];
+const fs=require("fs"), p=process.env.PRMPT_CFG;
 let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
 let hit=false;
 for (const ev of Object.keys(j.hooks||{})) {
@@ -140,11 +145,16 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 function Invoke-NodeScript {
-  param([string] $Script, [string[]] $Arguments)
+  param([string] $Script)
   # The program goes through a temp FILE, not through `-e`. PowerShell leaves
   # the double quotes inside an argument unescaped when it hands it to a native
   # program, so `-e $MergeJs` arrived at node with every `"utf8"` collapsed to
-  # `utf8`. Passing a path instead means nothing but paths crosses the boundary.
+  # `utf8`. Passing a path instead means nothing but a path crosses the boundary.
+  #
+  # The program's inputs arrive in the ENVIRONMENT for the same reason, plus one
+  # of its own: PowerShell drops an empty-string argument to a native command,
+  # and Claude Code and Codex both pass an empty matcher. On argv that shifted
+  # every later value along by one and lost the hook path entirely.
   #
   # Out-Host, not a bare call: in PowerShell any uncaptured output from a
   # function becomes part of its RETURN VALUE, so node printing a line would
@@ -153,7 +163,7 @@ function Invoke-NodeScript {
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("prmpt-" + [guid]::NewGuid() + ".js")
   try {
     [System.IO.File]::WriteAllText($tmp, $Script)
-    & $NodeBin $tmp @Arguments | Out-Host
+    & $NodeBin $tmp | Out-Host
     return $LASTEXITCODE
   } finally {
     Remove-Item -Force -ErrorAction SilentlyContinue $tmp
@@ -165,7 +175,8 @@ if ($Uninstall) {
   Write-Host 'Removing prmpt' -ForegroundColor White
   foreach ($f in @($ClaudeCfg, $CodexCfg, $GeminiCfg)) {
     if (Test-Path $f) {
-      if ((Invoke-NodeScript -Script $CleanJs -Arguments @($f)) -eq 0) {
+      $env:PRMPT_CFG = $f
+      if ((Invoke-NodeScript -Script $CleanJs) -eq 0) {
         Write-Ok "cleaned $f (backup: $f.bak)"
       }
     }
@@ -279,7 +290,12 @@ foreach ($t in $targets) {
   # freshly created file ("unparseable JSON, leaving it alone"). A fresh install
   # wired up nothing and still exited 0. This overload writes UTF-8 with no BOM.
   if (-not (Test-Path $t.Cfg)) { [System.IO.File]::WriteAllText($t.Cfg, "{}") }
-  $rc = Invoke-NodeScript -Script $MergeJs -Arguments @($t.Cfg, $t.Event, "$($t.Timeout)", $t.Matcher, $Hook)
+  $env:PRMPT_CFG     = $t.Cfg
+  $env:PRMPT_EVENT   = $t.Event
+  $env:PRMPT_TIMEOUT = "$($t.Timeout)"
+  $env:PRMPT_MATCHER = $t.Matcher
+  $env:PRMPT_HOOK    = $Hook
+  $rc = Invoke-NodeScript -Script $MergeJs
   if ($rc -eq 0) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"
     $configured++
