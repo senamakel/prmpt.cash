@@ -14,8 +14,23 @@ Gemini CLI and Amp.
 
 ## Install
 
+**macOS / Linux**
+
 ```sh
 curl -fsSL https://prmpt.click/install.sh | sh -s -- --wallet <your-solana-address>
+```
+
+**Windows (PowerShell)**
+
+```powershell
+$env:PRMPT_WALLET = "<your-solana-address>"; irm https://prmpt.click/install.ps1 | iex
+```
+
+A piped script cannot take parameters, hence the environment variable. To pass
+them properly, run it as a scriptblock instead:
+
+```powershell
+& ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Wallet <your-solana-address>
 ```
 
 That detects the agents you have, wires each one up using *its own* documented
@@ -122,6 +137,13 @@ correctly. Per-host detail lives in [`codex/`](codex/README.md),
 finished turn, but neither documents a way for that hook to show you anything —
 so an ad could be matched and never displayed, and you would earn nothing from
 it. We would rather leave them out than take the impression.
+
+**The Windows installer is unverified.** `install.ps1` mirrors `install.sh`
+step for step and delegates every JSON edit to the same Node one-liners, so the
+merge behaviour is identical by construction rather than reimplemented — but it
+has not been run against a real Windows install here. Treat it as unverified
+and please report anything that does not match. `install.sh` works under WSL if
+you would rather stay on a tested path.
 
 **The Amp integration is unverified.** It is written against Amp's documented
 plugin API but has not been run against a live Amp install. The Claude Code,
