@@ -119,13 +119,31 @@ test('Claude Code: a transcript ending in a tool result still finds the turn tex
   });
 
   assert.equal(res.code, 0);
-  // Documented behaviour: the walk stops at the trailing user/tool entry, so
-  // no assistant text is gathered and the hook stays silent rather than
-  // sending a previous turn's text.
-  assert.equal(input, undefined, 'no request should be made when the walk finds no text');
-  assert.equal(server.requests.length, 0);
-  assert.equal(res.stdout, '');
+  // Tool results are user-role entries, but they are not the user's prompt.
+  // Breaking on them ended the walk immediately and served no ad for any turn
+  // that used a tool and then answered -- silently, and for a very common
+  // transcript shape. The walk now skips them and stops at the real prompt.
+  assert.equal(server.requests.length, 1, 'the turn text is still reachable past a tool result');
+  assert.equal(input.turnText, LONG_TURN);
+  assert.ok(!input.turnText.includes('run the tests'), 'the prompt itself is never sent');
   assert.equal(res.stderr, '');
+});
+
+test('Claude Code: the walk still stops at the user prompt, never crossing turns', async () => {
+  const transcript = writeTranscript([
+    userEntry('first question'),
+    assistantEntry('PREVIOUS TURN TEXT that must never be sent, padded out so it clears the minimum length gate comfortably.'),
+    userEntry('second question'),
+    assistantEntry(LONG_TURN),
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] } },
+  ]);
+  const { input } = await serve({
+    payload: { session_id: 's2', transcript_path: transcript, hook_event_name: 'Stop' },
+    env: { CLAUDECODE: '1' },
+  });
+
+  assert.equal(input.turnText, LONG_TURN);
+  assert.ok(!input.turnText.includes('PREVIOUS TURN TEXT'));
 });
 
 test('Claude Code: version and model ride along as harnessVersion and model', async () => {
