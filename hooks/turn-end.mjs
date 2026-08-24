@@ -73,6 +73,9 @@ function textOfMessage(message) {
  * at the first user/tool entry, which marks the start of this turn.
  */
 function finalAssistantText(transcriptPath) {
+  // Also yields the harness version and model, which ride along on the same
+  // transcript entries we are already parsing -- so identifying the harness
+  // costs no extra file reads and no subprocess.
   let fd;
   try {
     fd = fs.openSync(transcriptPath, 'r');
@@ -84,6 +87,8 @@ function finalAssistantText(transcriptPath) {
     const lines = buf.toString('utf8').split('\n');
 
     const parts = [];
+    let version = '';
+    let model = '';
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i].trim();
       if (!line) continue;
@@ -94,19 +99,36 @@ function finalAssistantText(transcriptPath) {
         continue;
       }
       const role = entry?.message?.role ?? entry?.role;
+      if (!version && typeof entry?.version === 'string') version = entry.version;
+      if (!model && typeof entry?.message?.model === 'string') model = entry.message.model;
       if (role === 'user' || entry?.type === 'user') break;
       if (role !== 'assistant') continue;
       const text = textOfMessage(entry.message ?? entry);
       if (text) parts.push(text);
     }
-    return parts.reverse().join('\n').trim();
+    return { text: parts.reverse().join('\n').trim(), version, model };
   } catch {
-    return '';
+    return { text: '', version: '', model: '' };
   } finally {
     if (fd !== undefined) {
       try { fs.closeSync(fd); } catch { /* ignore */ }
     }
   }
+}
+
+/**
+ * Which coding agent is running us.
+ *
+ * Claude Code sets CLAUDECODE=1 and delivers a hook payload with
+ * `hook_event_name`; Codex invokes `notify` with a JSON argv whose `type` is
+ * `agent-turn-complete`. Anything else stays `unknown` -- the backend buckets
+ * unrecognised values rather than trusting whatever a client sends.
+ */
+function detectHarness(payload) {
+  if (typeof payload?.type === 'string' && payload.type.startsWith('agent-turn')) return 'codex';
+  if (payload?.hook_event_name || process.env.CLAUDECODE === '1') return 'claude-code';
+  if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_SESSION_ID) return 'cursor';
+  return 'unknown';
 }
 
 /**
@@ -177,8 +199,13 @@ function main() {
         break;
       }
     }
-    if (!turnText && typeof payload.transcript_path === 'string' && payload.transcript_path) {
-      turnText = finalAssistantText(payload.transcript_path);
+    let harnessVersion = '';
+    let model = '';
+    if (typeof payload.transcript_path === 'string' && payload.transcript_path) {
+      const parsed = finalAssistantText(payload.transcript_path);
+      harnessVersion = parsed.version;
+      model = parsed.model;
+      if (!turnText) turnText = parsed.text;
     }
     if (turnText.length < MIN_TURN_CHARS) return quiet();
     if (turnText.length > MAX_TURN_CHARS) turnText = turnText.slice(-MAX_TURN_CHARS);
@@ -191,6 +218,9 @@ function main() {
       turnText,
       repoLanguage,
       fileTypes,
+      harness: detectHarness(payload),
+      harnessVersion: harnessVersion || undefined,
+      model: model || undefined,
     });
     if (!ad) return quiet();
 
