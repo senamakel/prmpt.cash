@@ -192,6 +192,26 @@ test('a config that was already there survives, backup and all', async () => {
   assert.deepEqual(readJSON(backup), before, 'the .bak is not the original file');
 });
 
+test('a config written with a UTF-8 BOM is still merged into', async () => {
+  // Windows tooling writes BOMs and JSON.parse rejects them, so a BOM used to
+  // route the config down the "unparseable, leave it alone" path -- the install
+  // reported success and wired up nothing. install.ps1 did this to its own
+  // freshly created file, so a fresh Windows install configured no agent at all.
+  const box = sandbox();
+  const file = hostConfigPath(box, HOSTS[0]);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `\uFEFF${JSON.stringify({ model: 'opus' })}`);
+
+  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+
+  const after = fs.readFileSync(file, 'utf8');
+  assert.ok(!after.startsWith('\uFEFF'), 'the BOM was written back out');
+  const config = JSON.parse(after);
+  assert.equal(config.model, 'opus', 'the rest of the config was lost');
+  assert.equal(ourEntries(config, 'Stop').length, 1, 'the hook was not merged in');
+});
+
 test('a config that is not valid JSON is left completely alone', async () => {
   const box = sandbox();
   const file = hostConfigPath(box, HOSTS[0]);

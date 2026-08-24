@@ -103,7 +103,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     [ -f "$f" ] || continue
     if "$NODE_BIN" -e '
       const fs=require("fs"), p=process.argv[1];
-      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8")); } catch { process.exit(1); }
+      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
         const groups=j.hooks[ev];
@@ -216,7 +216,9 @@ merge_hook() {
     const fs=require("fs");
     const [p,event,timeout,matcher,hook]=process.argv.slice(1);
     let j={};
-    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").trim() : "";
+    // Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
+// them, and refusing to touch the file would leave the user silently unwired.
+const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
     if (raw) {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }

@@ -92,7 +92,9 @@ $MergeJs = @'
 const fs=require("fs");
 const [p,event,timeout,matcher,hook]=process.argv.slice(1);
 let j={};
-const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").trim() : "";
+// Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
+// them, and refusing to touch the file would leave the user silently unwired.
+const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
 if (raw) {
   try { j=JSON.parse(raw); }
   catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
@@ -117,7 +119,7 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 
 $CleanJs = @'
 const fs=require("fs"), p=process.argv[1];
-let j; try { j=JSON.parse(fs.readFileSync(p,"utf8")); } catch { process.exit(1); }
+let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
 let hit=false;
 for (const ev of Object.keys(j.hooks||{})) {
   const groups=j.hooks[ev];
@@ -272,7 +274,11 @@ foreach ($t in $targets) {
     Write-Skip "$($t.Label) not found"; continue
   }
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $t.Cfg) | Out-Null
-  if (-not (Test-Path $t.Cfg)) { Set-Content -Path $t.Cfg -Value '{}' -Encoding utf8 }
+  # WriteAllText, not Set-Content -Encoding utf8: on Windows PowerShell 5.1 that
+  # switch writes a UTF-8 BOM, and the merge below then refused to touch its own
+  # freshly created file ("unparseable JSON, leaving it alone"). A fresh install
+  # wired up nothing and still exited 0. This overload writes UTF-8 with no BOM.
+  if (-not (Test-Path $t.Cfg)) { [System.IO.File]::WriteAllText($t.Cfg, "{}") }
   $rc = Invoke-NodeScript -Script $MergeJs -Arguments @($t.Cfg, $t.Event, "$($t.Timeout)", $t.Matcher, $Hook)
   if ($rc -eq 0) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"

@@ -45,6 +45,10 @@ test('install.ps1 wires up every host with its own event and timeout unit', { sk
   for (const host of HOSTS) {
     const file = hostConfigPath(box, host);
     assert.ok(fs.existsSync(file), `${host.label}: ${file} was not written`);
+    assert.ok(
+      !fs.readFileSync(file, 'utf8').startsWith('\uFEFF'),
+      `${host.label}: install.ps1 left a UTF-8 BOM, which every agent's JSON parser rejects`,
+    );
     const [entry] = ourEntries(readJSON(file), host.event);
     assert.ok(entry, `${host.label}: no entry under ${host.event}`);
     assert.equal(entry.timeout, host.timeout, `${host.label}: wrong timeout unit`);
