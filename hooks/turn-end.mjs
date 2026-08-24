@@ -120,13 +120,31 @@ function finalAssistantText(transcriptPath) {
  * Which coding agent is running us.
  *
  * Claude Code sets CLAUDECODE=1 and delivers a hook payload with
- * `hook_event_name`; Codex invokes `notify` with a JSON argv whose `type` is
+ * `hook_event_name`; Codex's `notify` passes a JSON argv whose `type` is
  * `agent-turn-complete`. Anything else stays `unknown` -- the backend buckets
  * unrecognised values rather than trusting whatever a client sends.
  */
 function detectHarness(payload) {
+  // An explicit override always wins -- several hosts are indistinguishable
+  // from their payload alone, and guessing wrong only skews the dashboard.
+  const forced = (process.env.ADENGINE_HARNESS || '').trim();
+  if (forced) return forced;
+
+  const event = payload?.hook_event_name;
+
+  // Codex's older `notify` program: the event arrives as a JSON argv.
   if (typeof payload?.type === 'string' && payload.type.startsWith('agent-turn')) return 'codex';
-  if (payload?.hook_event_name || process.env.CLAUDECODE === '1') return 'claude-code';
+
+  // Gemini CLI fires AfterAgent and exports its own project/session vars.
+  if (event === 'AfterAgent' || process.env.GEMINI_SESSION_ID || process.env.GEMINI_PROJECT_DIR) {
+    return 'gemini-cli';
+  }
+
+  // Claude Code and Codex BOTH name their end-of-turn event `Stop`, so the
+  // payload cannot separate them. CLAUDECODE=1 is only set by Claude Code.
+  if (process.env.CLAUDECODE === '1') return 'claude-code';
+  if (event === 'Stop') return 'codex';
+
   if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_SESSION_ID) return 'cursor';
   return 'unknown';
 }
@@ -189,7 +207,9 @@ function main() {
     let turnText = '';
     const directCandidates = [
       payload['last-assistant-message'], // Codex notify, agent-turn-complete
-      payload.last_assistant_message,
+      payload.last_assistant_message, // Codex Stop hook
+      payload.prompt_response, // Gemini CLI AfterAgent
+      payload.text, // Cursor afterAgentResponse
       payload.assistant_message,
       payload.turnText,
     ];
