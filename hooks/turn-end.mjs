@@ -176,6 +176,9 @@ function detectHarness(payload) {
   if (process.env.CLAUDECODE === '1') return 'claude-code';
   if (event === 'Stop') return 'codex';
 
+  // Cursor names its event afterAgentResponse; the env vars are a fallback for
+  // hosts that do not forward the event name.
+  if (event === 'afterAgentResponse') return 'cursor';
   if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_SESSION_ID) return 'cursor';
   return 'unknown';
 }
