@@ -181,7 +181,7 @@ function main() {
 
     if (asText) {
       const dim = process.stdout.isTTY && !process.env.NO_COLOR;
-      const out = lines.map((l) => (dim ? `[2m${l}[0m` : l)).join('\n');
+      const out = lines.map((l) => (dim ? `\x1b[2m${l}\x1b[0m` : l)).join('\n');
       process.stdout.write(`${out}\n`);
     } else {
       process.stdout.write(`${JSON.stringify({ systemMessage: lines.join('\n') })}\n`);
