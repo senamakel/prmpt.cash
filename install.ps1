@@ -21,6 +21,11 @@
   exactly the wrong tool here.
 
 .EXAMPLE
+  # The default: creates a Solana wallet here and proves it by signature.
+  .\install.ps1
+
+.EXAMPLE
+  # Or redeem a dashboard code, keeping the key off this machine entirely.
   .\install.ps1 -Code K3H9F-2QPRS
 
 .EXAMPLE
@@ -35,6 +40,7 @@
 [CmdletBinding()]
 param(
   [string] $Code     = $env:PRMPT_CODE,
+  [switch] $NoLogin,
   [string] $Agents   = $env:PRMPT_AGENTS,
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
@@ -153,9 +159,13 @@ if ($Uninstall) {
   }
   if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir; Write-Ok "removed $Dir" }
   Write-Host ''
-  Write-Host "Your token at $env:USERPROFILE\.config\prmpt\config.json was left alone."
-  Write-Host 'Delete it too to stop this install serving. Deleting it does not'
-  Write-Host 'revoke the token: nothing can, and it stays valid until it expires.'
+  Write-Host "Your token and wallet key under $env:USERPROFILE\.config\prmpt\ were"
+  Write-Host 'both left alone -- on purpose. wallet.json is the only copy of the key,'
+  Write-Host 'and removing an ad plugin is not a reason to destroy it. Export it first'
+  Write-Host 'if you want it, then delete the directory.'
+  Write-Host ''
+  Write-Host 'Deleting the token does not revoke it: nothing can, and it stays valid'
+  Write-Host 'until it expires.'
   exit 0
 }
 
@@ -167,7 +177,7 @@ $selfDir = if ($PSScriptRoot) { $PSScriptRoot } else { '' }
 if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
   if ($selfDir -ne $Dir) {
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-    foreach ($item in @('hooks','amp','codex','gemini','.claude-plugin','package.json','README.md','install.sh','install.ps1')) {
+    foreach ($item in @('bin','hooks','amp','codex','gemini','.claude-plugin','package.json','README.md','install.sh','install.ps1')) {
       $src = Join-Path $selfDir $item
       if (Test-Path $src) { Copy-Item -Recurse -Force $src (Join-Path $Dir $item) }
     }
@@ -207,17 +217,29 @@ if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install d
 # ------------------------------------------------------------------------ link
 Write-Host ''
 $cfgFile = Join-Path $Home_ '.config\prmpt\config.json'
+$Cli = Join-Path $Dir 'bin\prmpt.mjs'
 if ($Code) {
   Write-Host 'Linking this install' -ForegroundColor White
   $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin (Join-Path $Dir 'hooks\link.mjs') $Code
+  & $NodeBin $Cli link $Code
   if ($LASTEXITCODE -ne 0) { Die 'linking failed -- nothing was wired up. Fix the above and re-run.' }
 } elseif (Test-Path $cfgFile) {
   Write-Skip 'already linked'
+} elseif ($NoLogin) {
+  Write-Warn '-NoLogin: the hook will stay silent until you run'
+  Write-Warn "  node $Cli login"
 } else {
-  Write-Warn 'no -Code given: the hook will stay silent until you link it.'
-  Write-Warn 'sign in with your wallet in the dashboard, mint an install code, then run:'
-  Write-Warn "  node $Dir\hooks\link.mjs <install-code>"
+  # The default: the plugin creates its own Solana wallet and signs the SIWS
+  # challenge with it, so there is no browser step. A failure is not fatal --
+  # the agents still get wired up, and the hook retries in the background.
+  Write-Host 'Creating a wallet and signing in' -ForegroundColor White
+  $env:PRMPT_ENDPOINT = $Endpoint
+  & $NodeBin $Cli login
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn 'sign-in failed -- the agents are still being wired up.'
+    Write-Warn 'the hook retries in the background, or run it yourself:'
+    Write-Warn "  node $Cli login"
+  }
 }
 
 # ----------------------------------------------------------------- wire agents

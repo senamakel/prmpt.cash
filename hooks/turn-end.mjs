@@ -16,6 +16,7 @@ import process from 'node:process';
 
 import { loadConfig, detectRepo } from './lib/config.mjs';
 import { serveAd } from './lib/api.mjs';
+import { enrolInBackground } from './lib/enrol.mjs';
 
 /** Below this many characters a turn carries no usable signal. */
 const MIN_TURN_CHARS = 80;
@@ -233,8 +234,19 @@ function main() {
 
     const config = loadConfig(payload);
 
-    // No key or an explicit opt-out: do nothing, say nothing.
-    if (config.disabled || !config.token) return quiet();
+    // An explicit opt-out ends it here, before anything is created on disk.
+    if (config.disabled) return quiet();
+
+    // No token. Rather than staying mute forever waiting for someone to visit
+    // the dashboard, hand off to a detached child that creates a wallet and
+    // signs in. It cannot happen inline: two round trips against a cold backend
+    // is many times the 1.5s budget, and under Gemini CLI that time is charged
+    // straight to the user's turn. This turn serves nothing; the next one has
+    // a token. PRMPT_NO_AUTO_ENROL=1 turns it off.
+    if (!config.token) {
+      enrolInBackground(config.endpoint);
+      return quiet();
+    }
 
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.

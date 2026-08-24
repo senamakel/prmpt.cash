@@ -14,9 +14,13 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
   }
 }`;
 
-// A terminal cannot open a wallet prompt, so the plugin does not sign anything.
-// The wallet is proven once in the dashboard, which mints a one-off code; this
-// exchanges that code for the plugin's own long-lived token.
+// The dashboard route into an account: a browser proves a wallet with a real
+// wallet extension and mints a one-off code, which this exchanges for the
+// plugin's own long-lived token.
+//
+// Still the right flow for anyone whose key must never touch this machine. The
+// SIWS pair below is the other route -- the plugin signs with a key it holds
+// itself, which needs no browser at all. See hooks/lib/wallet.mjs.
 //
 // installId lives on the nested `publisher`, not on the payload. Asking for it
 // at the top level is a VALIDATION error, so the request fails with HTTP 422
@@ -24,6 +28,32 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
 // nothing about, because it never runs.
 const EXCHANGE_INSTALL_CODE = `mutation ExchangeInstallCode($code: String!) {
   exchangeInstallCode(code: $code) {
+    token
+    expiresAt
+    publisher {
+      installId
+      solanaWallet
+    }
+  }
+}`;
+
+// Sign-In With Solana, the two halves of one round trip.
+//
+// The signature must cover the server's `message` BYTE FOR BYTE. Rebuilding
+// the text client-side from its visible parts is the classic way to fail this:
+// the domain, the chain id and the issued-at timestamp all come from server
+// configuration, and a single character of drift verifies against nothing.
+const SIWS_CHALLENGE = `mutation SiwsChallenge($wallet: String!) {
+  siwsChallenge(wallet: $wallet) {
+    wallet
+    nonce
+    message
+    expiresAt
+  }
+}`;
+
+const SIWS_VERIFY = `mutation SiwsVerify($wallet: String!, $nonce: String!, $signature: String!) {
+  siwsVerify(wallet: $wallet, nonce: $nonce, signature: $signature) {
     token
     expiresAt
     publisher {
@@ -156,6 +186,59 @@ export async function exchangeInstallCode({ endpoint, code, timeoutMs = 15000 })
   }
   return {
     token,
+    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
+    installId: node.publisher?.installId ?? null,
+    solanaWallet: node.publisher?.solanaWallet ?? null,
+  };
+}
+
+/**
+ * Ask for a one-time SIWS challenge to sign.
+ *
+ * Throws like exchangeInstallCode does: every caller is a person running a
+ * command and waiting for it, so a failure has to be legible.
+ */
+export async function siwsChallenge({ endpoint, wallet, timeoutMs = 15000 }) {
+  const data = await graphql({
+    endpoint,
+    query: SIWS_CHALLENGE,
+    variables: { wallet },
+    timeoutMs,
+  });
+
+  const node = data?.siwsChallenge;
+  if (!node || typeof node.message !== 'string' || typeof node.nonce !== 'string') {
+    throw new Error('prmpt: siwsChallenge returned no challenge');
+  }
+  return {
+    wallet: typeof node.wallet === 'string' ? node.wallet : wallet,
+    nonce: node.nonce,
+    message: node.message,
+    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
+  };
+}
+
+/**
+ * Hand back the signature and take the publisher JWT.
+ *
+ * The nonce is consumed by the backend before the signature is even checked, so
+ * a failure here burns the challenge. Retrying means minting a fresh one, which
+ * is why the login command runs both halves rather than exposing them apart.
+ */
+export async function siwsVerify({ endpoint, wallet, nonce, signature, timeoutMs = 15000 }) {
+  const data = await graphql({
+    endpoint,
+    query: SIWS_VERIFY,
+    variables: { wallet, nonce, signature },
+    timeoutMs,
+  });
+
+  const node = data?.siwsVerify;
+  if (!node || typeof node.token !== 'string' || !node.token) {
+    throw new Error('prmpt: siwsVerify returned no token');
+  }
+  return {
+    token: node.token,
     expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
     installId: node.publisher?.installId ?? null,
     solanaWallet: node.publisher?.solanaWallet ?? null,
