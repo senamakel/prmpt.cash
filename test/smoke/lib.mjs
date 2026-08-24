@@ -93,6 +93,13 @@ export function smokeEnv(home, extra = {}) {
     env.PATHEXT = process.env.PATHEXT;
     // Git Bash resolves /tmp against this; without it mktemp -d fails.
     env.MSYS = process.env.MSYS;
+    // powershell.exe and cmd.exe both need a little more than PATH to start.
+    // HOMEDRIVE/HOMEPATH are deliberately NOT inherited: they would point
+    // PowerShell's $HOME at the real user profile and the sandbox would leak.
+    env.PSModulePath = process.env.PSModulePath;
+    env.windir = process.env.windir;
+    env.PROCESSOR_ARCHITECTURE = process.env.PROCESSOR_ARCHITECTURE;
+    env.NUMBER_OF_PROCESSORS = process.env.NUMBER_OF_PROCESSORS;
   }
   for (const [k, v] of Object.entries(extra)) {
     if (v === undefined) delete env[k];
