@@ -17,12 +17,13 @@ import {
   HOSTS,
   IS_WINDOWS,
   PLUGIN_DIR,
-  TEST_WALLET,
+  TEST_CODE,
+  TEST_TOKEN,
+  agentFreePath,
   entriesFor,
   exec,
   hostConfigPath,
   install,
-  nodeOnlyPath,
   ourEntries,
   readJSON,
   runRecorded,
@@ -44,14 +45,14 @@ test('--help exits 0 and documents every flag', async () => {
   const box = sandbox();
   const res = await install(box, ['--help']);
   assert.equal(res.code, 0, res.stderr);
-  for (const flag of ['--wallet', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
+  for (const flag of ['--code', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
     assert.ok(res.stdout.includes(flag), `--help does not mention ${flag}`);
   }
 });
 
 test('an unknown flag fails loudly rather than installing something unexpected', async () => {
   const box = sandbox();
-  const res = await install(box, ['--wallet-address', TEST_WALLET, '--dir', box.dirArg]);
+  const res = await install(box, ['--install-code', TEST_CODE, '--dir', box.dirArg]);
   assert.notEqual(res.code, 0, 'unknown flag should not exit 0');
   assert.ok(/unknown option/.test(res.stderr), res.stderr);
   assert.ok(!fs.existsSync(box.dir), 'nothing should have been installed');
@@ -227,7 +228,7 @@ test('--project writes beside the project and never touches HOME', async () => {
   }
 });
 
-test('--uninstall removes our entries, keeps everyone else\'s, and keeps the key', async () => {
+test('--uninstall removes our entries, keeps everyone else\'s, and keeps the token', async () => {
   const box = sandbox();
   const file = hostConfigPath(box, HOSTS[0]);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -237,10 +238,10 @@ test('--uninstall removes our entries, keeps everyone else\'s, and keeps the key
 
   await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
 
-  // Pretend the user had registered: the key must outlive an uninstall.
-  const configDir = path.join(box.home, '.config', 'adengine');
+  // Pretend the user had linked: the token must outlive an uninstall.
+  const configDir = path.join(box.home, '.config', 'prmpt');
   fs.mkdirSync(configDir, { recursive: true });
-  fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ apiKey: 'ak_keep_me' }));
+  fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ token: 'keep_me' }));
 
   const res = await install(box, ['--uninstall', '--dir', box.dirArg]);
   assert.equal(res.code, 0, res.stderr);
@@ -257,50 +258,54 @@ test('--uninstall removes our entries, keeps everyone else\'s, and keeps the key
   assert.ok(!fs.existsSync(box.dir), 'install dir survived uninstall');
   assert.ok(
     fs.existsSync(path.join(configDir, 'config.json')),
-    'uninstall deleted the API key, which it documents that it does not',
+    'uninstall deleted the token, which it documents that it does not',
   );
 });
 
-test('a bad wallet aborts before anything is wired up', async () => {
+test('a malformed install code aborts before anything is wired up', async () => {
   const box = sandbox();
-  const res = await install(box, ['--wallet', 'not-a-wallet', '--agents', ALL_AGENTS, '--dir', box.dirArg]);
-  assert.notEqual(res.code, 0, 'a rejected wallet must not exit 0');
-  assert.ok(/invalid Solana wallet/.test(res.stderr), res.stderr);
+  const res = await install(box, ['--code', 'TOO-SHORT', '--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  assert.notEqual(res.code, 0, 'a rejected code must not exit 0');
+  assert.ok(/install code/i.test(res.stderr), res.stderr);
   for (const host of HOSTS) {
-    assert.ok(!fs.existsSync(hostConfigPath(box, host)), `${host.label}: wired up despite a bad wallet`);
+    assert.ok(!fs.existsSync(hostConfigPath(box, host)), `${host.label}: wired up despite a bad code`);
   }
 });
 
-test('a good wallet registers, stores the key privately, and then wires up', async () => {
+test('a good install code links, stores the token privately, and then wires up', async () => {
   const server = await stubServer(() => ({
     data: {
-      registerPublisher: {
-        apiKey: 'ak_smoke_key',
-        publisher: { installId: 'inst_smoke', solanaWallet: TEST_WALLET },
+      exchangeInstallCode: {
+        token: TEST_TOKEN,
+        expiresAt: '2099-01-01T00:00:00Z',
+        publisher: { installId: 'inst_smoke', solanaWallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' },
       },
     },
   }));
   try {
     const box = sandbox();
     const res = await install(box, [
-      '--wallet', TEST_WALLET,
+      '--code', TEST_CODE,
       '--endpoint', server.url,
       '--agents', ALL_AGENTS,
       '--dir', box.dirArg,
     ]);
     assert.equal(res.code, 0, `${res.stdout}\n${res.stderr}`);
-    assert.ok(!res.stdout.includes('ak_smoke_key'), 'the API key was echoed to the terminal');
+    assert.ok(!res.stdout.includes(TEST_TOKEN), 'the token was echoed to the terminal');
+    assert.ok(!res.stderr.includes(TEST_TOKEN), 'the token was echoed to stderr');
 
-    const configFile = path.join(box.home, '.config', 'adengine', 'config.json');
+    const configFile = path.join(box.home, '.config', 'prmpt', 'config.json');
     const config = readJSON(configFile);
-    assert.equal(config.apiKey, 'ak_smoke_key');
-    assert.equal(config.solanaWallet, TEST_WALLET);
-    assert.equal(config.endpoint, server.url, 'the endpoint we registered against was not recorded');
+    assert.equal(config.token, TEST_TOKEN, 'the token was not persisted');
+    assert.equal(config.endpoint, server.url, 'the endpoint we linked against was not recorded');
 
     if (!IS_WINDOWS) {
       const mode = fs.statSync(configFile).mode & 0o777;
       assert.equal(mode.toString(8), '600', 'config.json is not 0600');
     }
+
+    // The code itself is single-use; exactly one redemption must be attempted.
+    assert.equal(server.requests.length, 1, `redeemed the code ${server.requests.length} times`);
 
     for (const host of HOSTS) {
       assert.equal(ourEntries(readJSON(hostConfigPath(box, host)), host.event).length, 1);
@@ -310,24 +315,24 @@ test('a good wallet registers, stores the key privately, and then wires up', asy
   }
 });
 
-test('a backend that refuses registration leaves the machine untouched', async () => {
+test('a backend that refuses the code leaves the machine untouched', async () => {
   const server = await stubServer((_body, _req, res) => {
-    res.writeHead(500, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ errors: [{ message: 'nope' }] }));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ errors: [{ message: 'install code not found or already used' }] }));
   });
   try {
     const box = sandbox();
     const res = await install(box, [
-      '--wallet', TEST_WALLET,
+      '--code', TEST_CODE,
       '--endpoint', server.url,
       '--agents', ALL_AGENTS,
       '--dir', box.dirArg,
     ]);
-    assert.notEqual(res.code, 0, 'a failed registration must not exit 0');
+    assert.notEqual(res.code, 0, 'a failed link must not exit 0');
     for (const host of HOSTS) {
       assert.ok(
         !fs.existsSync(hostConfigPath(box, host)),
-        `${host.label}: wired up despite a failed registration`,
+        `${host.label}: wired up despite a failed link`,
       );
     }
   } finally {
@@ -338,7 +343,7 @@ test('a backend that refuses registration leaves the machine untouched', async (
 test('with no agents selected and none present, the installer says so and fails', async () => {
   const box = sandbox();
   // Autodetect with an empty HOME and a PATH that has node but no agent.
-  const res = await install(box, ['--dir', box.dirArg], { env: { PATH: nodeOnlyPath() } });
+  const res = await install(box, ['--dir', box.dirArg], { env: { PATH: agentFreePath() } });
   assert.notEqual(res.code, 0, 'configuring nothing should not report success');
   assert.ok(/no agents were configured/.test(res.stderr), res.stderr);
 });

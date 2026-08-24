@@ -97,7 +97,10 @@ for (const g of groups) {
     g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
   }
 }
-const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
+// Quoted, because a Windows install dir routinely contains a space --
+// "C:\Users\Jane Smith\AppData\Local\prmpt". An unquoted path there
+// produces a config that parses and a hook that never runs.
+const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
 if (matcher) entry.name = "prmpt";
 const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
 j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);

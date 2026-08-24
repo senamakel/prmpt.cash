@@ -149,12 +149,15 @@ finished turn, but neither documents a way for that hook to show you anything �
 so an ad could be matched and never displayed, and you would earn nothing from
 it. We would rather leave them out than take the impression.
 
-**The Windows installer is unverified.** `install.ps1` mirrors `install.sh`
-step for step and delegates every JSON edit to the same Node one-liners, so the
-merge behaviour is identical by construction rather than reimplemented — but it
-has not been run against a real Windows install here. Treat it as unverified
-and please report anything that does not match. `install.sh` works under WSL if
-you would rather stay on a tested path.
+**The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
+`install.sh` step for step and delegates every JSON edit to the same Node
+one-liners, so the merge behaviour is identical by construction rather than
+reimplemented. CI runs both of them on a Windows runner — install, re-install,
+uninstall, and executing the recorded command through `cmd.exe` — and checks
+the two installers write the same entry. What is still unverified is a hook
+firing inside a real Windows agent session, which needs credentials CI does not
+have. `install.sh` works under WSL if you would rather stay on the path with the
+most mileage.
 
 **The Amp integration is unverified.** It is written against Amp's documented
 plugin API but has not been run against a live Amp install. The Claude Code,
@@ -163,8 +166,29 @@ Codex and Gemini CLI paths were tested end to end.
 ## Development
 
 ```sh
-node --test test/*.test.mjs      # 77 tests, no network, no dependencies
+npm test           # the hook's own behaviour: fast, no network, no dependencies
+npm run test:smoke # installation: the installer against real agents, on this OS
+npm run test:all   # both
 ```
+
+`npm test` covers what the hook does with a payload. `npm run test:smoke` covers
+the part that is easy to get wrong and impossible to notice — running the
+installer for real, then executing the exact command string it wrote into each
+agent's config, on the platform that would have to execute it. It found an
+unquoted install path (anything under `Application Support`, or a Windows user
+whose name has a space) and a Git Bash install recording an `/c/Users/...` path
+that no Windows agent can resolve. Both installed cleanly and never once ran.
+
+CI runs it on Linux, macOS and Windows, and a second job installs Claude Code,
+Codex and Gemini CLI from npm and runs the installer next to them. The agents
+all install unauthenticated, so everything short of a live turn is testable —
+autodetection, `claude plugin validate --strict`, and the hook serving a real
+sponsored block through each host's documented payload. What CI cannot do is
+watch a hook fire inside a real session; that needs credentials, and the suite
+says so rather than implying otherwise.
+
+The smoke suite skips any agent that is not installed, so it is useful locally
+with only the agents you happen to have. In CI a skip is a failure.
 
 Point at a local backend:
 

@@ -26,13 +26,17 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const PLUGIN_DIR = path.resolve(here, '..', '..');
 export const INSTALL_SH = path.join(PLUGIN_DIR, 'install.sh');
+export const INSTALL_PS1 = path.join(PLUGIN_DIR, 'install.ps1');
 export const IS_WINDOWS = process.platform === 'win32';
 
-/** A valid-looking Solana address (base58, 44 chars) for registration tests. */
-export const TEST_WALLET = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+/**
+ * A well-formed install code: ten characters of the backend's alphabet, which
+ * omits everything that gets misread off a screen (no I, L, O, U, 0 or 1).
+ */
+export const TEST_CODE = 'K3H9F2QPRS';
 
-/** Matches what test/helpers.mjs uses, so one grep proves the key never leaks. */
-export const TEST_API_KEY = 'ak_test_SECRET_KEY_MUST_NEVER_BE_PRINTED';
+/** The token a stub backend hands back. Nothing may ever print it. */
+export const TEST_TOKEN = 'eyJ.smoke.SECRET_TOKEN_MUST_NEVER_BE_PRINTED';
 
 // ---------------------------------------------------------------- scratch dirs
 
@@ -49,7 +53,7 @@ process.on('exit', () => {
  * `home`/`dir` are native paths for Node to assert against; `homeArg`/`dirArg`
  * are the same paths in the form bash and the agents both accept.
  */
-export function sandbox(prefix = 'adengine-smoke-') {
+export function sandbox(prefix = 'prmpt-smoke-') {
   const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   scratch.push(home);
   const dir = path.join(home, 'app');
@@ -117,6 +121,14 @@ export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 18
   });
 }
 
+/** Run install.ps1 under PowerShell with the given sandbox HOME. Windows only. */
+export function installPs1(box, args = [], { env = {}, cwd = PLUGIN_DIR } = {}) {
+  return exec('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', INSTALL_PS1, ...args,
+  ], { env: smokeEnv(box.home, { APPDATA: path.join(box.home, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(box.home, 'AppData', 'Local'), ...env }), cwd });
+}
+
 /** Run install.sh under bash with the given sandbox HOME. */
 export function install(box, args = [], { env = {}, cwd = PLUGIN_DIR } = {}) {
   return exec('bash', [shellPath(INSTALL_SH), ...args], {
@@ -139,23 +151,26 @@ export function runRecorded(command, { env, stdin = '' } = {}) {
 }
 
 /**
- * A PATH containing node and nothing else.
+ * This machine's PATH with every directory that holds an agent CLI removed.
  *
- * Autodetection tests need a machine with no agents on it. Pointing PATH at
- * node's own directory is not enough: on CI the agent CLIs are npm globals and
- * land in exactly that directory, so the "no agents present" test would quietly
- * assert the opposite of what it says.
+ * The autodetection test needs a machine with no agents on it. Reducing PATH to
+ * node's own directory does not achieve that: on CI the agent CLIs are npm
+ * globals and land in exactly that directory, so the "no agents present" test
+ * would quietly assert the opposite of what it says. Dropping only the
+ * directories that actually contain one keeps bash, tar and mktemp, which the
+ * installer needs to get far enough to reach the detection it is being tested on.
  */
-export function nodeOnlyPath() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'adengine-bin-'));
-  scratch.push(dir);
-  // A /bin/sh shim rather than a symlink or a .cmd: the only thing that ever
-  // resolves `node` from this PATH is install.sh, which is bash on every
-  // platform including Windows, and a shim works there where a symlink does not.
-  const shim = path.join(dir, 'node');
-  fs.writeFileSync(shim, `#!/bin/sh\nexec "${shellPath(process.execPath)}" "$@"\n`);
-  fs.chmodSync(shim, 0o755);
-  return dir;
+export function agentFreePath() {
+  const sep = IS_WINDOWS ? ';' : ':';
+  const names = ['claude', 'codex', 'gemini', 'amp'];
+  const exts = IS_WINDOWS ? ['', '.exe', '.cmd', '.bat', '.ps1'] : [''];
+  return (process.env.PATH || '')
+    .split(sep)
+    .filter((dir) => {
+      if (!dir) return false;
+      return !names.some((n) => exts.some((e) => fs.existsSync(path.join(dir, n + e))));
+    })
+    .join(sep);
 }
 
 // -------------------------------------------------------------- config access
@@ -218,8 +233,12 @@ export const HOSTS = [
   },
 ];
 
-/** Amp is a copied TypeScript plugin, not a hook entry, so it gets its own row. */
-export const AMP_PLUGIN = ['.config', 'amp', 'plugins', 'adengine.ts'];
+/**
+ * Amp is a copied TypeScript plugin, not a hook entry, so it gets its own row.
+ * install.sh puts it under XDG config even on Windows, because that is where
+ * Git Bash resolves $HOME/.config to; install.ps1 uses %APPDATA%.
+ */
+export const AMP_PLUGIN = ['.config', 'amp', 'plugins', 'prmpt.ts'];
 
 export function hostConfigPath(box, host) {
   return path.join(box.home, ...host.userConfig);
