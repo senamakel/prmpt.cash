@@ -8,7 +8,8 @@
 # What it does, in order:
 #   1. checks Node >= 18                (the hook is plain ESM, no dependencies)
 #   2. copies the plugin to a stable directory
-#   3. redeems your install code and stores the token at mode 0600
+#   3. creates a Solana wallet and signs in with it, storing both at mode 0600
+#      (or redeems --code instead, if you would rather keep the key elsewhere)
 #   4. wires up every agent it finds, using that agent's own documented hook
 #
 # It is idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -26,6 +27,7 @@ CODE=""
 ENDPOINT=""
 AGENTS=""
 UNINSTALL=0
+NO_LOGIN=0
 SCOPE="user"
 INSTALL_DIR=""
 
@@ -46,7 +48,9 @@ usage() {
   cat <<USAGE
 ${B}prmpt.click installer${R}
 
-  --code <code>        One-off install code from the dashboard (10 chars)
+  --code <code>        Redeem a dashboard install code instead of creating a
+                       wallet here. Use it when the key must stay off this box.
+  --no-login           Install and wire up the agents, but create no wallet
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
@@ -54,18 +58,25 @@ ${B}prmpt.click installer${R}
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
-Your wallet is proven by signature in the dashboard, which is the only place a
-wallet prompt can open. It hands you a one-off code; this passes it on.
+By default this creates a Solana wallet for you and proves it to the backend by
+signature -- no browser, no code to paste. The key is written to
+~/.config/prmpt/wallet.json at mode 0600 and is the only copy: it is a hot
+wallet holding ad revenue, so back it up with 'prmpt wallet export'.
 
-Run with no --code to install and wire up the agents without linking;
-you can register later with:
+Two other routes, both first-class:
 
-  node <install-dir>/hooks/link.mjs <install-code>
+  --code <code>   prove a wallet in the dashboard with a real wallet extension
+                  and redeem the one-off code it mints. The key never touches
+                  this machine.
+  --no-login      install now, decide later:
+                    <install-dir>/bin/prmpt.mjs login
+                    <install-dir>/bin/prmpt.mjs wallet import <secret-key>
 USAGE
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --no-login)  NO_LOGIN=1; shift ;;
     --code)      CODE="${2:-}"; shift 2 ;;
     --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
@@ -128,9 +139,13 @@ if [ "$UNINSTALL" -eq 1 ]; then
   done
   [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR" && ok "removed $INSTALL_DIR"
   say ""
-  say "Your token at ${D}~/.config/prmpt/config.json${R} was left alone."
-  say "Delete it too to stop this install serving. Note that deleting it does"
-  say "not revoke the token: nothing can, and it stays valid until it expires."
+  say "Your token at ${D}~/.config/prmpt/config.json${R} and your wallet key at"
+  say "${D}~/.config/prmpt/wallet.json${R} were both left alone -- on purpose. The key"
+  say "is the only copy, and removing an ad plugin is not a reason to destroy it."
+  say "Export it first if you want it, then delete the directory."
+  say ""
+  say "Note that deleting the token does not revoke it: nothing can, and it stays"
+  say "valid until it expires."
   exit 0
 fi
 
@@ -144,7 +159,7 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/hooks/turn-end.mjs" ]; then
   if [ "$SELF_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
     # -R over cp -a: BusyBox cp has no -a.
-    (cd "$SELF_DIR" && tar cf - hooks amp codex gemini .claude-plugin package.json README.md install.sh 2>/dev/null) \
+    (cd "$SELF_DIR" && tar cf - bin hooks amp codex gemini .claude-plugin package.json README.md install.sh 2>/dev/null) \
       | (cd "$INSTALL_DIR" && tar xf -)
     ok "installed from this checkout to $INSTALL_DIR"
   else
@@ -177,18 +192,31 @@ HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
 # ------------------------------------------------------------------------ link
+CLI="$INSTALL_DIR/bin/prmpt.mjs"
 say ""
 if [ -n "$CODE" ]; then
   say "${B}Linking this install${R}"
-  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$INSTALL_DIR/hooks/link.mjs" "$CODE" \
+  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" link "$CODE" \
     || die "linking failed -- nothing was wired up. Fix the above and re-run."
+elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
+  skip "already linked (${D}~/.config/prmpt/config.json${R})"
+elif [ "$NO_LOGIN" -eq 1 ]; then
+  warn "--no-login: the hook will stay silent until you run"
+  warn "  $NODE_BIN $CLI login"
 else
-  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
-    skip "already linked (${D}~/.config/prmpt/config.json${R})"
+  # The default path, and the reason this installer no longer needs a dashboard
+  # visit: the plugin holds its own key and signs the SIWS challenge itself.
+  #
+  # A failure here is NOT fatal. The box may be offline, or behind a proxy, and
+  # the hook enrols itself in the background on a later turn anyway. Wiring up
+  # the agents is the part that has to happen while the installer is running.
+  say "${B}Creating a wallet and signing in${R}"
+  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" login; then
+    :
   else
-    warn "no --code given: the hook will stay silent until you link it."
-    warn "sign in with your wallet in the dashboard, mint an install code, then run:"
-    warn "  node $INSTALL_DIR/hooks/link.mjs <install-code>"
+    warn "sign-in failed -- the agents are still being wired up."
+    warn "the hook retries in the background, or run it yourself:"
+    warn "  $NODE_BIN $CLI login"
   fi
 fi
 

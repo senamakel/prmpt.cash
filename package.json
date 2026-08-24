@@ -9,6 +9,8 @@
   "bugs": { "url": "https://github.com/senamakel/prmpt.click/issues" },
   "keywords": ["ads", "sponsorship", "monetization", "solana", "usdc", "claude-code", "codex", "gemini-cli", "amp"],
   "engines": { "node": ">=18" },
+  "bin": { "prmpt": "bin/prmpt.mjs" },
+  "files": ["bin", "hooks", "amp", "install.sh", "install.ps1", "README.md", "LICENSE"],
   "scripts": {
     "test": "node --test test/*.test.mjs"
   }
