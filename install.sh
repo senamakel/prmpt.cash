@@ -169,7 +169,16 @@ else
   fi
 fi
 
-HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
+# On Windows the installer runs under Git Bash, but every agent that will read
+# the config is a native Windows program. It cannot resolve an MSYS path like
+# /c/Users/foo, so the path recorded in the config must be converted first --
+# otherwise the install looks perfect and the hook never once runs.
+HOOK_DIR="$INSTALL_DIR"
+if command -v cygpath >/dev/null 2>&1; then
+  HOOK_DIR=$(cygpath -m "$INSTALL_DIR" 2>/dev/null || printf '%s' "$INSTALL_DIR")
+fi
+
+HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
 # -------------------------------------------------------------------- register
@@ -218,7 +227,10 @@ merge_hook() {
         g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
       }
     }
-    const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
+    // Quoted, because the install dir routinely contains a space: macOS puts
+    // it under "Application Support" and Windows under "C:/Users/Jane Smith".
+    // An unquoted path there produces a config that parses and never runs.
+    const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
     if (matcher) entry.name = "tryprompt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
