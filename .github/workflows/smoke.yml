@@ -1,0 +1,118 @@
+# Installation smoke.
+#
+# The unit suite (ci.yml) proves the hook behaves. This one proves the thing a
+# user actually does first: run the installer on their machine, next to their
+# agent, and get a hook that runs. It is split in two because the halves fail
+# for different reasons and want different matrices.
+#
+#   install  three operating systems and three Node versions, no agents needed.
+#            Covers install.sh everywhere and install.ps1 on Windows.
+#   agents   the real Claude Code, Codex and Gemini CLI, installed from npm.
+#            Covers autodetection, the plugin manifest Claude Code parses, and
+#            the exact command string each host is expected to execute.
+#
+# The weekly schedule is not decoration. Every one of these hosts ships changes
+# on its own cadence, and the failure mode when one renames an event or moves a
+# config file is a plugin that installs cleanly and silently earns nothing. It
+# is better to learn that here than from a user who never notices.
+
+name: Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Mondays, 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install · ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    # A hung agent CLI is a real failure mode -- `claude doctor` sat for 79
+    # minutes on a Windows runner once. Fail in twenty, do not burn six hours.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20']
+        include:
+          # 18 is the floor the plugin claims, so it is tested rather than
+          # assumed; 22 catches anything the floor version tolerates.
+          - os: ubuntu-latest
+            node: '18'
+          - os: ubuntu-latest
+            node: '22'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # bash on every runner, Git Bash on Windows: that is how a Windows user
+      # runs a POSIX shell script, and the only way install.sh runs there.
+      - name: install.sh parses as POSIX sh
+        shell: bash
+        run: sh -n install.sh
+
+      - name: install.ps1 parses
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path .\install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+
+      - name: installer smoke
+        shell: bash
+        run: node --test test/smoke/installer.smoke.test.mjs test/smoke/windows.smoke.test.mjs
+
+  agents:
+    name: agents · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Every supported host ships as an npm global, which is what makes this
+      # job possible at all: the agents install unauthenticated, and everything
+      # short of running a turn works without credentials.
+      - name: install the agent CLIs
+        shell: bash
+        run: |
+          npm install -g \
+            @anthropic-ai/claude-code \
+            @openai/codex \
+            @google/gemini-cli
+
+      - name: the agents are on PATH
+        shell: bash
+        run: |
+          set -eux
+          claude --version
+          codex --version
+          gemini --version
+
+      - name: agent smoke
+        shell: bash
+        # A missing agent makes this suite skip rather than fail, which would
+        # turn a broken install step into a green build. This makes it explicit.
+        env:
+          PRMPT_SMOKE_REQUIRE_AGENTS: '1'
+        run: node --test test/smoke/agents.smoke.test.mjs
