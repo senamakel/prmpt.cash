@@ -48,6 +48,6 @@ Two details in Amp's event shape are easy to get wrong, and this plugin handles 
 ## Status
 
 The Amp integration is written against Amp's documented plugin API but has **not** been exercised
-against a live Amp install here — unlike the Claude Code, Codex and Gemini CLI paths, which were
+against a live Amp install here, unlike the Claude Code, Codex and Gemini CLI paths, which were
 tested end to end. Treat it as unverified until you have run it, and please report anything that
 does not match.

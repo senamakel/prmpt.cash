@@ -61,7 +61,7 @@ prmpt login
 ```
 
 And if you would rather the key never touched this machine at all, the dashboard
-route still works exactly as before — prove your wallet there with a real wallet
+route still works exactly as before. Prove your wallet there with a real wallet
 extension and redeem the one-off code it mints:
 
 ```sh
@@ -75,7 +75,7 @@ curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 /plugin install prmpt@prmpt
 ```
 
-Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
+Prefer to read it first? It is one POSIX shell file, [`install.sh`](install.sh).
 
 ```sh
 git clone https://github.com/senamakel/prmpt.cash
@@ -87,7 +87,7 @@ git clone https://github.com/senamakel/prmpt.cash
 
 ```
 --code <code>        redeem a dashboard install code instead of creating a
-                     wallet here — use it to keep the key off this machine
+                     wallet here; use it to keep the key off this machine
 --no-login           install and wire up the agents, but create no wallet
 --version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
@@ -98,13 +98,13 @@ git clone https://github.com/senamakel/prmpt.cash
 ```
 </details>
 
-Re-running is safe — it upgrades in place, and replaces its own hook entry rather
+Re-running is safe. It upgrades in place, and replaces its own hook entry rather
 than appending, so you cannot end up with duplicates.
 
 ## The wallet
 
 **One seed phrase, two chains.** The plugin generates a BIP-39 mnemonic and
-derives both addresses from it — Solana at `m/44'/501'/0'/0'` and Base at
+derives both addresses from it: Solana at `m/44'/501'/0'/0'` and Base at
 `m/44'/60'/0'/0/0`, the same paths Phantom and MetaMask use. Twelve words are
 one thing to write down, and they import into either wallet unchanged.
 
@@ -120,9 +120,9 @@ Base, and SOL, TINY and XAUt0 on Solana. You choose on the dashboard.
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
 prmpt dashboard                 # open the web dashboard, signed in as this install
-prmpt status                    # wallet, token, expiry, endpoint — nothing secret
+prmpt status                    # wallet, token, expiry, endpoint; nothing secret
 prmpt wallet                    # print both addresses
-prmpt wallet mnemonic           # print the seed phrase — this is the backup
+prmpt wallet mnemonic           # print the seed phrase; this is the backup
 prmpt wallet new [--force]      # generate a fresh phrase and both keys
 prmpt wallet import <secret>    # adopt a phrase, or a Solana key (- reads stdin)
 prmpt wallet export [--json]    # print the Solana secret key
@@ -132,12 +132,12 @@ prmpt logout                    # forget the token; the keys are left alone
 
 **The plugin holds keys; the web holds settings.** `prmpt dashboard` mints a
 single-use two-minute code from the token already on disk and opens it in your
-browser — no wallet extension needed, and the key never leaves the machine.
+browser, with no wallet extension needed and the key never leaving the machine.
 Everything worth configuring, and every number worth reading, lives there.
 
 The hook also enrols itself: an install with no token detaches a `prmpt login`
 child on the first turn and serves normally from the next one. It is never on
-the turn's own clock — two round trips against a cold backend is many times the
+the turn's own clock, because two round trips against a cold backend is many times the
 1.5s budget. `PRMPT_NO_AUTO_ENROL=1` turns that off.
 
 ### Say the quiet part out loud
@@ -158,9 +158,9 @@ on:
   still prints the Solana key alone, in base58 or `solana-keygen` array form.)
   Lose the file without a backup and the earnings paid to those addresses are
   gone with it. No `--uninstall` deletes it, on purpose.
-- **Or bring your own.** `prmpt wallet import` takes a seed phrase — which
-  brings both chains — or a bare Solana key, so payouts can land in a wallet you
-  already control and already back up. An imported raw key has no phrase behind
+- **Or bring your own.** `prmpt wallet import` takes either a seed phrase,
+  which brings both chains, or a bare Solana key, so payouts can land in a
+  wallet you already control and already back up. An imported raw key has no phrase behind
   it, so a separate Base key is generated and stored in `evm.json`; back that up
   too, or import a phrase instead and avoid the second file entirely.
 - **Or keep the key off the box entirely.** `prmpt link <code>` still works. The
@@ -181,7 +181,7 @@ Deliberately a different file from the key: config.json is rewritten by every
 code path that touches settings, and it is the file people paste into bug
 reports. The key stays out of both blast radii.
 
-The token is never echoed, never logged, and never appears in hook output — it
+The token is never echoed, never logged, and never appears in hook output. It
 travels only in the `Authorization: Bearer` header of the serve request.
 
 It is also long-lived and **cannot be revoked**: it stays valid until it
@@ -207,7 +207,7 @@ Being honest about what that does and does not guarantee:
 - **The checksum proves integrity, not authenticity.** `SHA256SUMS` ships as an
   asset of the same release as the tarball, so verifying it catches a truncated
   download or a proxy serving the wrong bytes. It does not prove the release is
-  genuine — anyone who could publish a release could publish a matching sum.
+  genuine, because anyone who could publish a release could publish a matching sum.
   That trust is anchored in GitHub and in who holds release permission on the
   repository. Detached signing is what would change that, and is not done yet.
 - **Nothing is unpacked before it verifies.** Checksum first, then extract, then
@@ -216,8 +216,8 @@ Being honest about what that does and does not guarantee:
 - **The swap is a rename, with the old tree kept until the new one lands.** If
   the second rename fails, the old one goes back.
 - **Your credentials are never in the blast radius.** The token and wallet key
-  live in `~/.config/prmpt`, not in the install directory, so no update — or
-  failed update — can touch them. There is a test that asserts exactly this.
+  live in `~/.config/prmpt`, not in the install directory, so neither an update
+  nor a failed update can touch them. There is a test that asserts exactly this.
 - **A git checkout is never touched.** If you are developing the plugin, update
   it with git; the auto-updater refuses outright and does not even check.
 
@@ -271,26 +271,26 @@ See [`.env.example`](.env.example) for every knob.
 
 | Agent | Event | Config |
 |---|---|---|
-| Claude Code | `Stop` | `~/.claude/settings.json` — timeout in **seconds** |
-| Codex | `Stop` | `~/.codex/hooks.json` — timeout in **seconds** |
-| Gemini CLI | `AfterAgent` | `~/.gemini/settings.json` — timeout in **milliseconds** |
-| Amp | `agent.end` | a TypeScript plugin, not a hook — see [`amp/`](amp/README.md) |
+| Claude Code | `Stop` | `~/.claude/settings.json`, timeout in **seconds** |
+| Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
+| Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
+| Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
 
 Those units and event names are not interchangeable; the installer handles each
 correctly. Per-host detail lives in [`codex/`](codex/README.md),
 [`gemini/`](gemini/README.md) and [`amp/`](amp/README.md).
 
 **Cursor and Windsurf are deliberately absent.** Both can hand a hook the
-finished turn, but neither documents a way for that hook to show you anything —
-so an ad could be matched and never displayed, and you would earn nothing from
+finished turn, but neither documents a way for that hook to show you anything.
+An ad could be matched and never displayed, and you would earn nothing from
 it. We would rather leave them out than take the impression.
 
 **The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
 `install.sh` step for step and delegates every JSON edit to the same Node
 one-liners, so the merge behaviour is identical by construction rather than
-reimplemented. CI runs both of them on a Windows runner — install, re-install,
-uninstall, and executing the recorded command through `cmd.exe` — and checks
-the two installers write the same entry. What is still unverified is a hook
+reimplemented. CI runs both of them on a Windows runner, covering install,
+re-install, uninstall and executing the recorded command through `cmd.exe`, and
+checks the two installers write the same entry. What is still unverified is a hook
 firing inside a real Windows agent session, which needs credentials CI does not
 have. `install.sh` works under WSL if you would rather stay on the path with the
 most mileage.
@@ -302,13 +302,13 @@ Codex and Gemini CLI paths were tested end to end.
 ## Releasing
 
 Releases are cut by tag. `.github/workflows/release.yml` is the only supported
-way to publish one — the installer and the updater both look for an asset named
+way to publish one, because the installer and the updater both look for an asset named
 exactly `prmpt-<version>.tar.gz` plus a `SHA256SUMS`, and a hand-rolled release
 without them is invisible to both.
 
 ```sh
 # 1. bump the version in package.json, commit it
-# 2. tag it — the tag must match package.json exactly
+# 2. tag it. The tag must match package.json exactly
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
@@ -319,7 +319,7 @@ forever or never updating again.
 
 It then runs the tests, builds the tarball from an explicit file list (no tests,
 no workflows, no `.git`), verifies the archive unpacks and runs, publishes it,
-and finally installs from the published release for real — which is the only
+and finally installs from the published release for real. That is the only
 place the download-and-verify path in `install.sh` is exercised, since CI
 otherwise runs the installer from a checkout.
 
@@ -334,14 +334,14 @@ npm run test:all   # both
 `npm test` spawns the real hook and the real CLI as subprocesses against stub
 servers on ephemeral ports, so it exercises exit codes, streams and the wire
 rather than internal functions. The stub verifies SIWS signatures the same way
-`backend/internal/auth/siws.go` does — against the exact message it minted — so
+`backend/internal/auth/siws.go` does, against the exact message it minted, so
 a client that rebuilt the message locally fails there rather than in production.
 
 `npm run test:smoke` covers the step before that one, which is easy to get wrong
 and impossible to notice: running the installer for real, then executing the
 exact command string it wrote into each agent's config, on the platform that
 would have to execute it. Everything it has found so far installed cleanly,
-reported success, and never ran —
+reported success, and never ran:
 
 - an unquoted hook path, so any install directory containing a space broke it
   (`Application Support`, or a Windows user named `Jane Smith`);
@@ -349,7 +349,7 @@ reported success, and never ran —
   Windows agent can resolve;
 - `install.ps1` failing its own Node version check on every version of Node,
   because PowerShell does not escape quotes inside an argument to a native
-  command — it had never worked;
+  command, so it had never worked;
 - `Set-Content -Encoding utf8` writing a BOM, after which the merge step refused
   to touch its own freshly created file and wired up nothing;
 - PowerShell dropping an empty-string argument, which shifted every later value
@@ -357,7 +357,7 @@ reported success, and never ran —
 
 CI runs it on Linux, macOS and Windows, and a second job installs Claude Code,
 Codex and Gemini CLI from npm and runs the installer next to them. All three
-install unauthenticated, so everything short of a live turn is testable —
+install unauthenticated, so everything short of a live turn is testable:
 autodetection, `claude plugin validate --strict`, and the hook serving a real
 sponsored block through each host's documented payload. What CI cannot do is
 watch a hook fire inside a real session; that needs credentials, and the suite
@@ -386,7 +386,7 @@ itself as `.bak`.
 removing an ad plugin is not a reason to destroy it. Export it first if you want
 it, then delete the directory yourself.
 
-Deleting the token stops this install serving. It does not revoke it — nothing
+Deleting the token stops this install serving. It does not revoke it. Nothing
 can, and a copy taken beforehand keeps working until it expires.
 
 ## License

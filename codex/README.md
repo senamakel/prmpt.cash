@@ -31,7 +31,7 @@ Create `~/.codex/hooks.json` (or `<repo>/.codex/hooks.json` to scope it to one p
 ## What the hook receives
 
 One JSON object on stdin. Alongside the common fields (`session_id`, `transcript_path`, `cwd`,
-`hook_event_name`, `model`) the `Stop` event carries **`last_assistant_message`** — the turn's final
+`hook_event_name`, `model`) the `Stop` event carries **`last_assistant_message`**, the turn's final
 assistant text, which is exactly what we match on. No transcript parsing is needed on this host.
 
 The hook replies with `{"systemMessage": "..."}` on stdout, which Codex surfaces to you. On any
@@ -48,7 +48,7 @@ notify = ["node", "/absolute/path/to/prmpt/plugin/hooks/turn-end.mjs"]
 ```
 
 It reads `last-assistant-message` and `thread-id` from that payload instead. Prefer the `Stop` hook
-where you have it — `notify` has no documented channel for showing you the result.
+where you have it, because `notify` has no documented channel for showing you the result.
 
 ## Linking your wallet
 
