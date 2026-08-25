@@ -17,7 +17,7 @@
  */
 import type { PluginAPI } from '@ampcode/plugin'
 
-const ENDPOINT = process.env.PRMPT_ENDPOINT ?? 'https://api.prmpt.click/graphql'
+const ENDPOINT = process.env.PRMPT_ENDPOINT ?? 'https://api.prmpt.cash/graphql'
 const TOKEN = process.env.PRMPT_TOKEN ?? process.env.PRMPT_API_KEY ?? ''
 const TIMEOUT_MS = 1500
 const MIN_TURN_CHARS = 80

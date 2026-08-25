@@ -70,7 +70,7 @@ test('a generated wallet has a valid address and verifiable signatures', async (
 
     // Verify with an independently-built key object, so this checks the
     // signature rather than just that sign() agreed with itself.
-    const message = 'prmpt.click wants you to sign in with your Solana account:\n…';
+    const message = 'prmpt.cash wants you to sign in with your Solana account:\n…';
     const signature = Buffer.from(decodeBase58(wallet.sign(message)));
     assert.equal(signature.length, 64);
 

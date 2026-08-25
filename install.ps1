@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  prmpt.click -- one installer for every supported coding agent, on Windows.
+  prmpt.cash -- one installer for every supported coding agent, on Windows.
 
 .DESCRIPTION
   The PowerShell twin of install.sh. Same steps, same on-disk result:
@@ -31,11 +31,11 @@
 .EXAMPLE
   # Piping from the web cannot take parameters, so pass the code by
   # environment variable:
-  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.click/install.ps1 | iex
+  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.cash/install.ps1 | iex
 
 .EXAMPLE
   # Or run it as a scriptblock, which can:
-  & ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Code K3H9F-2QPRS
+  & ([scriptblock]::Create((irm https://prmpt.cash/install.ps1))) -Code K3H9F-2QPRS
 #>
 [CmdletBinding()]
 param(
@@ -50,9 +50,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RepoUrl         = 'https://github.com/senamakel/prmpt.click.git'
-$ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.click/zip/refs/heads/main'
-$DefaultEndpoint = 'https://api.prmpt.click/graphql'
+$RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'
+$ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.cash/zip/refs/heads/main'
+$DefaultEndpoint = 'https://api.prmpt.cash/graphql'
 
 if (-not $Endpoint) { $Endpoint = $DefaultEndpoint }
 if (-not $Dir) { $Dir = Join-Path $env:LOCALAPPDATA 'prmpt' }
@@ -170,7 +170,7 @@ if ($Uninstall) {
 }
 
 # ------------------------------------------------------------------ get source
-Write-Host 'prmpt.click' -ForegroundColor White
+Write-Host 'prmpt.cash' -ForegroundColor White
 Write-Host ''
 
 $selfDir = if ($PSScriptRoot) { $PSScriptRoot } else { '' }

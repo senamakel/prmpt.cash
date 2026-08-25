@@ -1,4 +1,4 @@
-# prmpt.click
+# prmpt.cash
 
 **Get paid for using your coding agent.**
 
@@ -18,13 +18,13 @@ Codex, Gemini CLI and Amp.
 **macOS / Linux**
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh
+curl -fsSL https://prmpt.cash/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://prmpt.click/install.ps1 | iex
+irm https://prmpt.cash/install.ps1 | iex
 ```
 
 That detects the agents you have, wires each one up using *its own* documented
@@ -44,14 +44,14 @@ route still works exactly as before — prove your wallet there with a real wall
 extension and redeem the one-off code it mints:
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 ```
 
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
 
 ```sh
-git clone https://github.com/senamakel/prmpt.click
-./prmpt.click/install.sh
+git clone https://github.com/senamakel/prmpt.cash
+./prmpt.cash/install.sh
 ```
 
 <details>
@@ -144,7 +144,7 @@ forgets it locally; it does not invalidate a copy taken beforehand.
 ```
 Sponsored · Stop re-running flaky tests until green
 Quarantine detects flaky tests from your CI history and isolates them
-https://prmpt.click/7q
+https://prmpt.cash/7q
 ```
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
