@@ -64,7 +64,7 @@ Writes `~/.config/prmpt/config.json` at mode 0600. See the [main README](../READ
 ## Environment
 
 ```bash
-export PRMPT_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
+export PRMPT_ENDPOINT="https://api.prmpt.cash/graphql"   # optional, this is the default
 export PRMPT_HARNESS="codex"                            # optional; auto-detected
 export PRMPT_DISABLED=1                                 # turn serving off
 ```

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  prmpt.click -- one installer for every supported coding agent, on Windows.
+  prmpt.cash -- one installer for every supported coding agent, on Windows.
 
 .DESCRIPTION
   The PowerShell twin of install.sh. Same steps, same on-disk result:
@@ -31,16 +31,17 @@
 .EXAMPLE
   # Piping from the web cannot take parameters, so pass the code by
   # environment variable:
-  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.click/install.ps1 | iex
+  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.cash/install.ps1 | iex
 
 .EXAMPLE
   # Or run it as a scriptblock, which can:
-  & ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Code K3H9F-2QPRS
+  & ([scriptblock]::Create((irm https://prmpt.cash/install.ps1))) -Code K3H9F-2QPRS
 #>
 [CmdletBinding()]
 param(
   [string] $Code     = $env:PRMPT_CODE,
   [switch] $NoLogin,
+  [string] $Version  = $env:PRMPT_VERSION,
   [string] $Agents   = $env:PRMPT_AGENTS,
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
@@ -50,9 +51,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# PRMPT_NO_LOGIN=1 is -NoLogin by environment, for scripted installs that cannot
+# easily pass a switch. Without it the installer signs in against the default
+# endpoint -- production -- and creates a real publisher behind a throwaway wallet.
+if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
+
 $RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'
+$RepoSlug        = 'senamakel/prmpt.cash'
+# The fallback only; normal installs come from a published release.
 $ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.cash/zip/refs/heads/main'
-$DefaultEndpoint = 'https://api.prmpt.click/graphql'
+$DefaultEndpoint = 'https://api.prmpt.cash/graphql'
 
 if (-not $Endpoint) { $Endpoint = $DefaultEndpoint }
 if (-not $Dir) { $Dir = Join-Path $env:LOCALAPPDATA 'prmpt' }
@@ -65,8 +73,16 @@ function Die        { param($m) Write-Host "error: $m" -ForegroundColor Red; exi
 # ---------------------------------------------------------------- prerequisites
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Die 'Node.js 18+ is required and was not found on PATH.' }
-$major = [int](& node -p 'process.versions.node.split(".")[0]')
-if ($major -lt 18) { Die "Node 18+ required, found $(& node -v)." }
+# Parsed from `node -v` rather than `node -p '...split(".")...'`. PowerShell does
+# not escape quotes that are INSIDE an argument to a native command, so that
+# one-liner reached node as `process.versions.node.split(.)[0]` and threw a
+# SyntaxError -- which this script then reported as "Node 18+ required, found
+# v20". Every Windows install failed at the version check, on every version of
+# Node. Nothing here may pass a quote through to a native command.
+$nodeVersion = (& node -v)
+if ($nodeVersion -notmatch '^v(\d+)\.') { Die "could not read a version from ``node -v`` ($nodeVersion)." }
+$major = [int]$Matches[1]
+if ($major -lt 18) { Die "Node 18+ required, found $nodeVersion." }
 $NodeBin = $node.Source
 
 # Where each agent keeps its config. Windows uses the same dotted directories
@@ -88,22 +104,32 @@ if ($Project) {
 # The node programs are byte-for-byte the ones install.sh uses.
 $MergeJs = @'
 const fs=require("fs");
-const [p,event,timeout,matcher,hook]=process.argv.slice(1);
+const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
+const timeout=process.env.PRMPT_TIMEOUT, matcher=process.env.PRMPT_MATCHER||"";
+const hook=process.env.PRMPT_HOOK;
 let j={};
-const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").trim() : "";
+// Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
+// them, and refusing to touch the file would leave the user silently unwired.
+const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
 if (raw) {
   try { j=JSON.parse(raw); }
   catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
 }
+// Back up before the first modification, never after.
 if (raw) fs.copyFileSync(p, p+".bak");
+
 j.hooks = j.hooks || {};
 const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
+// Drop any previous entry of ours so re-running cannot stack duplicates.
 for (const g of groups) {
   if (Array.isArray(g.hooks)) {
     g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
   }
 }
-const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
+// Quoted, because the install dir routinely contains a space: macOS puts
+// it under "Application Support" and Windows under "C:/Users/Jane Smith".
+// An unquoted path there produces a config that parses and never runs.
+const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
 if (matcher) entry.name = "prmpt";
 const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
 j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
@@ -111,8 +137,8 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 $CleanJs = @'
-const fs=require("fs"), p=process.argv[1];
-let j; try { j=JSON.parse(fs.readFileSync(p,"utf8")); } catch { process.exit(1); }
+const fs=require("fs"), p=process.env.PRMPT_CFG;
+let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
 let hit=false;
 for (const ev of Object.keys(j.hooks||{})) {
   const groups=j.hooks[ev];
@@ -133,15 +159,29 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 function Invoke-NodeScript {
-  param([string] $Script, [string[]] $Arguments)
-  # -e with the program on argv, so nothing is quoted through cmd.exe.
+  param([string] $Script)
+  # The program goes through a temp FILE, not through `-e`. PowerShell leaves
+  # the double quotes inside an argument unescaped when it hands it to a native
+  # program, so `-e $MergeJs` arrived at node with every `"utf8"` collapsed to
+  # `utf8`. Passing a path instead means nothing but a path crosses the boundary.
+  #
+  # The program's inputs arrive in the ENVIRONMENT for the same reason, plus one
+  # of its own: PowerShell drops an empty-string argument to a native command,
+  # and Claude Code and Codex both pass an empty matcher. On argv that shifted
+  # every later value along by one and lost the hook path entirely.
   #
   # Out-Host, not a bare call: in PowerShell any uncaptured output from a
   # function becomes part of its RETURN VALUE, so node printing a line would
   # make this return an array instead of the exit code, and every `-eq 0`
   # check below would silently stop meaning what it says.
-  & $NodeBin -e $Script @Arguments | Out-Host
-  return $LASTEXITCODE
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("prmpt-" + [guid]::NewGuid() + ".js")
+  try {
+    [System.IO.File]::WriteAllText($tmp, $Script)
+    & $NodeBin $tmp | Out-Host
+    return $LASTEXITCODE
+  } finally {
+    Remove-Item -Force -ErrorAction SilentlyContinue $tmp
+  }
 }
 
 # ------------------------------------------------------------------- uninstall
@@ -149,7 +189,8 @@ if ($Uninstall) {
   Write-Host 'Removing prmpt' -ForegroundColor White
   foreach ($f in @($ClaudeCfg, $CodexCfg, $GeminiCfg)) {
     if (Test-Path $f) {
-      if ((Invoke-NodeScript -Script $CleanJs -Arguments @($f)) -eq 0) {
+      $env:PRMPT_CFG = $f
+      if ((Invoke-NodeScript -Script $CleanJs) -eq 0) {
         Write-Ok "cleaned $f (backup: $f.bak)"
       }
     }
@@ -170,7 +211,7 @@ if ($Uninstall) {
 }
 
 # ------------------------------------------------------------------ get source
-Write-Host 'prmpt.click' -ForegroundColor White
+Write-Host 'prmpt.cash' -ForegroundColor White
 Write-Host ''
 
 $selfDir = if ($PSScriptRoot) { $PSScriptRoot } else { '' }
@@ -185,30 +226,93 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
   } else {
     Write-Ok "using $Dir"
   }
-} elseif (Get-Command git -ErrorAction SilentlyContinue) {
-  if (Test-Path (Join-Path $Dir '.git')) {
-    & git -C $Dir fetch -q origin main
-    & git -C $Dir reset -q --hard origin/main
-    Write-Ok "updated $Dir"
-  } else {
-    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
-    & git clone -q --depth 1 $RepoUrl $Dir
-    Write-Ok "cloned to $Dir"
-  }
 } else {
-  # No git: fall back to the zipball.
+  # Normal installs come from a published release, so what lands here is a
+  # specific, checksummed version rather than whatever main happened to be.
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("prmpt-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-  $zip = Join-Path $tmp 'prmpt.zip'
-  Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zip
-  Expand-Archive -Path $zip -DestinationPath $tmp -Force
-  $inner = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
-  if (-not $inner) { Die 'the downloaded archive was empty.' }
-  if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
-  New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-  Copy-Item -Recurse -Force (Join-Path $inner.FullName '*') $Dir
-  Remove-Item -Recurse -Force $tmp
-  Write-Ok "downloaded to $Dir"
+
+  $api = if ($Version) {
+    "https://api.github.com/repos/$RepoSlug/releases/tags/$Version"
+  } else {
+    "https://api.github.com/repos/$RepoSlug/releases/latest"
+  }
+
+  $rel = $null
+  try {
+    $rel = Invoke-RestMethod -UseBasicParsing -Uri $api -Headers @{
+      'User-Agent' = 'prmpt-install'; 'Accept' = 'application/vnd.github+json'
+    }
+  } catch { $rel = $null }
+
+  $tarAsset  = $null
+  $sumsAsset = $null
+  if ($rel) {
+    $tag     = [string]$rel.tag_name
+    $relVer  = $tag -replace '^v', ''
+    $assetNm = "prmpt-$relVer.tar.gz"
+    $tarAsset  = $rel.assets | Where-Object { $_.name -eq $assetNm }  | Select-Object -First 1
+    $sumsAsset = $rel.assets | Where-Object { $_.name -eq 'SHA256SUMS' } | Select-Object -First 1
+  }
+
+  if ($tarAsset -and $sumsAsset) {
+    $tarPath  = Join-Path $tmp $tarAsset.name
+    $sumsPath = Join-Path $tmp 'SHA256SUMS'
+    Invoke-WebRequest -UseBasicParsing -Uri $tarAsset.browser_download_url  -OutFile $tarPath
+    Invoke-WebRequest -UseBasicParsing -Uri $sumsAsset.browser_download_url -OutFile $sumsPath
+
+    # Verify before unpacking, never after: an unverified archive must not be
+    # written over an install directory.
+    $expected = $null
+    foreach ($line in (Get-Content $sumsPath)) {
+      if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$' -and
+          [System.IO.Path]::GetFileName($Matches[2]) -eq $tarAsset.name) {
+        $expected = $Matches[1].ToLower()
+      }
+    }
+    if (-not $expected) { Die "$($tarAsset.name) is not listed in SHA256SUMS for $tag" }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $tarPath).Hash.ToLower()
+    if ($actual -ne $expected) {
+      Die "checksum mismatch for $($tarAsset.name)`n  expected $expected`n  got      $actual"
+    }
+
+    # tar.exe has shipped in Windows since build 17063; every supported host has it.
+    $unpack = Join-Path $tmp 'unpack'
+    New-Item -ItemType Directory -Force -Path $unpack | Out-Null
+    & tar xzf $tarPath -C $unpack
+    if ($LASTEXITCODE -ne 0) { Die "could not unpack $($tarAsset.name)" }
+
+    $root = $unpack
+    if (-not (Test-Path (Join-Path $root 'hooks\turn-end.mjs'))) {
+      $inner = Get-ChildItem -Path $unpack -Directory | Select-Object -First 1
+      if (-not $inner -or -not (Test-Path (Join-Path $inner.FullName 'hooks\turn-end.mjs'))) {
+        Die "$($tarAsset.name) does not contain a plugin"
+      }
+      $root = $inner.FullName
+    }
+
+    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $root '*') $Dir
+    Remove-Item -Recurse -Force $tmp
+    Write-Ok "installed $tag to $Dir (sha256 verified)"
+  } elseif ($Version) {
+    Die "no release $Version with an installable tarball. See https://github.com/$RepoSlug/releases"
+  } else {
+    # No release yet, or the API is unreachable. Fall back to main so a first
+    # install still works before the first tag is cut, and say so plainly.
+    Write-Warn 'no published release found; falling back to main (not checksummed)'
+    $zip = Join-Path $tmp 'prmpt.zip'
+    Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zip
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    $inner = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+    if (-not $inner) { Die 'the downloaded archive was empty.' }
+    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $inner.FullName '*') $Dir
+    Remove-Item -Recurse -Force $tmp
+    Write-Ok "downloaded main to $Dir"
+  }
 }
 
 $Hook = Join-Path $Dir 'hooks\turn-end.mjs'
@@ -274,8 +378,17 @@ foreach ($t in $targets) {
     Write-Skip "$($t.Label) not found"; continue
   }
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $t.Cfg) | Out-Null
-  if (-not (Test-Path $t.Cfg)) { Set-Content -Path $t.Cfg -Value '{}' -Encoding utf8 }
-  $rc = Invoke-NodeScript -Script $MergeJs -Arguments @($t.Cfg, $t.Event, "$($t.Timeout)", $t.Matcher, $Hook)
+  # WriteAllText, not Set-Content -Encoding utf8: on Windows PowerShell 5.1 that
+  # switch writes a UTF-8 BOM, and the merge below then refused to touch its own
+  # freshly created file ("unparseable JSON, leaving it alone"). A fresh install
+  # wired up nothing and still exited 0. This overload writes UTF-8 with no BOM.
+  if (-not (Test-Path $t.Cfg)) { [System.IO.File]::WriteAllText($t.Cfg, "{}") }
+  $env:PRMPT_CFG     = $t.Cfg
+  $env:PRMPT_EVENT   = $t.Event
+  $env:PRMPT_TIMEOUT = "$($t.Timeout)"
+  $env:PRMPT_MATCHER = $t.Matcher
+  $env:PRMPT_HOOK    = $Hook
+  $rc = Invoke-NodeScript -Script $MergeJs
   if ($rc -eq 0) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"
     $configured++

@@ -1,7 +1,7 @@
 #!/bin/sh
-# prmpt.click -- one installer for every supported coding agent.
+# prmpt.cash -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+#   curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 #
 # Or, from a checkout:  ./install.sh --code <install-code>
 #
@@ -19,9 +19,14 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_URL="https://github.com/senamakel/prmpt.cash.git"
-TARBALL_URL="https://codeload.github.com/senamakel/prmpt.cash/tar.gz/refs/heads/main"
-DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
+REPO_SLUG="senamakel/prmpt.cash"
+REPO_URL="https://github.com/$REPO_SLUG.git"
+# The fallback only. Normal installs come from a published release, so that what
+# lands here is a specific, checksummed version rather than whatever main was
+# at the moment you ran curl.
+TARBALL_URL="https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/main"
+DEFAULT_ENDPOINT="https://api.prmpt.cash/graphql"
+VERSION=""
 
 CODE=""
 ENDPOINT=""
@@ -46,11 +51,13 @@ die()  { printf '%serror:%s %s\n' "$E" "$R" "$*" >&2; exit 1; }
 
 usage() {
   cat <<USAGE
-${B}prmpt.click installer${R}
+${B}prmpt.cash installer${R}
 
   --code <code>        Redeem a dashboard install code instead of creating a
                        wallet here. Use it when the key must stay off this box.
   --no-login           Install and wire up the agents, but create no wallet
+                       (PRMPT_NO_LOGIN=1 does the same, for scripted installs)
+  --version <tag>      Install a specific release, e.g. v0.2.0 (default: latest)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
@@ -77,6 +84,8 @@ USAGE
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-login)  NO_LOGIN=1; shift ;;
+    --version)   VERSION="${2:-}"; shift 2 ;;
+    --version=*) VERSION="${1#*=}"; shift ;;
     --code)      CODE="${2:-}"; shift 2 ;;
     --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
@@ -93,6 +102,14 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$ENDPOINT" ] || ENDPOINT="$DEFAULT_ENDPOINT"
+
+# PRMPT_NO_LOGIN=1 is --no-login by environment. It exists so an automated
+# install -- a Dockerfile, a provisioning script, this project's own smoke suite
+# -- can be stopped from signing in without having to remember the flag at every
+# call site. Forgetting it is not a harmless mistake: without it the installer
+# signs in against the DEFAULT endpoint, which is production, and creates a real
+# publisher account behind a wallet that dies with the machine.
+[ "${PRMPT_NO_LOGIN:-}" = "1" ] && NO_LOGIN=1
 if [ -z "$INSTALL_DIR" ]; then
   INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
@@ -108,13 +125,13 @@ NODE_BIN=$(command -v node)
 
 # ------------------------------------------------------------------- uninstall
 if [ "$UNINSTALL" -eq 1 ]; then
-  say "${B}Removing prmpt.click${R}"
+  say "${B}Removing prmpt.cash${R}"
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
-    if "$NODE_BIN" -e '
-      const fs=require("fs"), p=process.argv[1];
-      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8")); } catch { process.exit(1); }
+    if PRMPT_CFG="$f" "$NODE_BIN" -e '
+      const fs=require("fs"), p=process.env.PRMPT_CFG;
+      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
         const groups=j.hooks[ev];
@@ -132,7 +149,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
       if (!hit) process.exit(2);
       fs.copyFileSync(p, p+".bak");
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-    ' "$f" 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
+    ' 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
   done
   for f in "$HOME/.config/amp/plugins/prmpt.ts" "./.amp/plugins/prmpt.ts"; do
     [ -f "$f" ] && rm -f "$f" && ok "removed $f"
@@ -150,7 +167,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 # ------------------------------------------------------------------ get source
-say "${B}prmpt.click${R}"
+say "${B}prmpt.cash${R}"
 say ""
 
 # Running from a checkout? Use it. Otherwise fetch.
@@ -166,29 +183,111 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/hooks/turn-end.mjs" ]; then
     ok "using $INSTALL_DIR"
   fi
 else
-  mkdir -p "$INSTALL_DIR"
-  if command -v git >/dev/null 2>&1; then
-    if [ -d "$INSTALL_DIR/.git" ]; then
-      (cd "$INSTALL_DIR" && git fetch -q origin main && git reset -q --hard origin/main)
-      ok "updated $INSTALL_DIR"
+  command -v curl >/dev/null 2>&1 || die "curl is required to download a release."
+  command -v tar  >/dev/null 2>&1 || die "tar is required to unpack a release."
+
+  # Ask the API which release to take. `releases/latest` excludes prereleases
+  # and drafts, so an rc is never picked up by an install that did not name it.
+  if [ -n "$VERSION" ]; then
+    API="https://api.github.com/repos/$REPO_SLUG/releases/tags/$VERSION"
+  else
+    API="https://api.github.com/repos/$REPO_SLUG/releases/latest"
+  fi
+
+  # Parsed with node, which is already a hard requirement above. Pulling a
+  # download URL out of JSON with grep and sed is how you end up installing
+  # whatever a crafted release name happens to contain.
+  meta=$("$NODE_BIN" -e '
+    const url = process.argv[1];
+    const headers = { "user-agent": "prmpt-install", accept: "application/vnd.github+json" };
+    if (process.env.GITHUB_TOKEN) headers.authorization = "Bearer " + process.env.GITHUB_TOKEN;
+    fetch(url, { headers }).then(async (r) => {
+      if (!r.ok) process.exit(3);
+      const j = await r.json();
+      const tag = j.tag_name || "";
+      const version = tag.replace(/^v/i, "");
+      const assets = Array.isArray(j.assets) ? j.assets : [];
+      const pick = (n) => assets.find((a) => a && a.name === n);
+      const tarball = pick(`prmpt-${version}.tar.gz`);
+      const sums = pick("SHA256SUMS");
+      if (!tarball || !sums) process.exit(4);
+      process.stdout.write([tag, tarball.name, tarball.browser_download_url, sums.browser_download_url].join("\n"));
+    }).catch(() => process.exit(3));
+  ' "$API" 2>/dev/null) || meta=""
+
+  if [ -n "$meta" ]; then
+    TAG=$(printf '%s\n' "$meta" | sed -n 1p)
+    ASSET=$(printf '%s\n' "$meta" | sed -n 2p)
+    ASSET_URL=$(printf '%s\n' "$meta" | sed -n 3p)
+    SUMS_URL=$(printf '%s\n' "$meta" | sed -n 4p)
+
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/$ASSET" "$ASSET_URL" || die "could not download $ASSET"
+    curl -fsSL -o "$tmp/SHA256SUMS" "$SUMS_URL" || die "could not download SHA256SUMS"
+
+    # Verify before unpacking, not after. An unverified archive must never be
+    # written over an install directory, even a fresh one.
+    expected=$(sed -n "s/^\([0-9a-f]\{64\}\) [ *]*$ASSET$/\1/p" "$tmp/SHA256SUMS" | head -n 1)
+    [ -n "$expected" ] || die "$ASSET is not listed in SHA256SUMS for $TAG"
+    if command -v sha256sum >/dev/null 2>&1; then
+      actual=$(sha256sum "$tmp/$ASSET" | cut -d" " -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+      actual=$(shasum -a 256 "$tmp/$ASSET" | cut -d" " -f1)
     else
+      actual=$("$NODE_BIN" -e '
+        const c=require("crypto"),f=require("fs");
+        process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"));
+      ' "$tmp/$ASSET")
+    fi
+    [ "$actual" = "$expected" ] || die "checksum mismatch for $ASSET
+  expected $expected
+  got      $actual"
+
+    unpack=$(mktemp -d)
+    tar xzf "$tmp/$ASSET" -C "$unpack"
+    # The release tarball is flat; a source tarball has one wrapping directory.
+    [ -f "$unpack/hooks/turn-end.mjs" ] || {
+      inner=$(find "$unpack" -maxdepth 2 -name turn-end.mjs -path '*/hooks/*' | head -n 1)
+      [ -n "$inner" ] || die "$ASSET does not contain a plugin"
+      unpack=$(dirname "$(dirname "$inner")")
+    }
+    rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
+    (cd "$unpack" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
+    rm -rf "$tmp" "$unpack"
+    ok "installed $TAG to $INSTALL_DIR ${D}(sha256 verified)${R}"
+  elif [ -n "$VERSION" ]; then
+    die "no release $VERSION with an installable tarball. See https://github.com/$REPO_SLUG/releases"
+  else
+    # No release yet, or the API is unreachable. Fall back to main so a first
+    # install still works before the first tag is cut -- and say so, because an
+    # unverified snapshot is not the same thing as a release.
+    warn "no published release found; falling back to main (not checksummed)"
+    mkdir -p "$INSTALL_DIR"
+    if command -v git >/dev/null 2>&1; then
       rm -rf "$INSTALL_DIR"
       git clone -q --depth 1 "$REPO_URL" "$INSTALL_DIR"
-      ok "cloned to $INSTALL_DIR"
+      ok "cloned main to $INSTALL_DIR"
+    else
+      tmp=$(mktemp -d)
+      curl -fsSL "$TARBALL_URL" | tar xz -C "$tmp" --strip-components=1
+      rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
+      (cd "$tmp" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
+      rm -rf "$tmp"
+      ok "downloaded main to $INSTALL_DIR"
     fi
-  elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-    tmp=$(mktemp -d)
-    curl -fsSL "$TARBALL_URL" | tar xz -C "$tmp" --strip-components=1
-    rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
-    (cd "$tmp" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
-    rm -rf "$tmp"
-    ok "downloaded to $INSTALL_DIR"
-  else
-    die "need git, or curl and tar, to fetch the plugin."
   fi
 fi
 
-HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
+# On Windows the installer runs under Git Bash, but every agent that will read
+# the config is a native Windows program. It cannot resolve an MSYS path like
+# /c/Users/foo, so the path recorded in the config must be converted first --
+# otherwise the install looks perfect and the hook never once runs.
+HOOK_DIR="$INSTALL_DIR"
+if command -v cygpath >/dev/null 2>&1; then
+  HOOK_DIR=$(cygpath -m "$INSTALL_DIR" 2>/dev/null || printf '%s' "$INSTALL_DIR")
+fi
+
+HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
 # ------------------------------------------------------------------------ link
@@ -231,11 +330,22 @@ merge_hook() {
   file="$1"; event="$2"; timeout="$3"; matcher="$4"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
+  # Values reach the program through the ENVIRONMENT, never argv. install.ps1
+  # runs the identical program, and PowerShell drops an empty-string argument to
+  # a native command outright -- Claude Code and Codex pass an empty matcher, so
+  # every later argument shifted by one and the hook path went missing. The
+  # environment preserves an empty value and needs no quoting on either side.
+  PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$HOOK" \
   "$NODE_BIN" -e '
     const fs=require("fs");
-    const [p,event,timeout,matcher,hook]=process.argv.slice(1);
+    const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
+    const timeout=process.env.PRMPT_TIMEOUT, matcher=process.env.PRMPT_MATCHER||"";
+    const hook=process.env.PRMPT_HOOK;
     let j={};
-    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").trim() : "";
+    // Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
+    // them, and refusing to touch the file would leave the user silently unwired.
+    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
     if (raw) {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
@@ -251,12 +361,15 @@ merge_hook() {
         g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
       }
     }
-    const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
+    // Quoted, because the install dir routinely contains a space: macOS puts
+    // it under "Application Support" and Windows under "C:/Users/Jane Smith".
+    // An unquoted path there produces a config that parses and never runs.
+    const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
     if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-  ' "$file" "$event" "$timeout" "$matcher" "$HOOK"
+  '
 }
 
 want() {
@@ -332,5 +445,5 @@ if [ -f "$INSTALL_DIR/install.sh" ]; then
   say "  ${D}Remove it:${R}    $INSTALL_DIR/install.sh --uninstall"
 else
   # $0 is "sh" when this was piped from curl, so it is not a runnable path.
-  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.click/install.sh | sh -s -- --uninstall"
+  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.cash/install.sh | sh -s -- --uninstall"
 fi

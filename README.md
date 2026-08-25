@@ -1,25 +1,26 @@
-# prmpt.click
+# prmpt.cash
 
 **Get paid for the coding-agent turns you already run.**
 
 When your agent finishes a reply, this hook asks whether any advertiser genuinely
 matches what you just did. Almost always the answer is no and nothing prints. On a
 match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
-price lands in your Solana wallet**, usually within a second, in whichever token you
+price lands in your wallet**, usually within a second, in whichever token you
 picked.
 
 You never had to sell anything, watch anything or click anything. Advertisers are
 paying for the moment a real problem is on your screen, and this is your share of it.
 
-| Token   | What it is                                                       |
-| ------- | ---------------------------------------------------------------- |
-| `TINY`  | Tiny Humans. The one most people take: stacked passively out of ad revenue, at no cost to you |
-| `cbBTC` | Bitcoin, one to one, on Solana                                   |
-| `SOL`   | Native lamports, no token account in the way                     |
-| `USDC`  | A dollar that stays a dollar. The default                        |
-| `XAUt0` | Tether Gold, if you would rather your terminal habit bought bullion |
+| Token   | Chain  | What it is                                                  |
+| ------- | ------ | ----------------------------------------------------------- |
+| `TINY`  | Solana | Tiny Humans. The one most people take: stacked passively out of ad revenue, at no cost to you |
+| `cbBTC` | Base   | Bitcoin, one to one                                         |
+| `ETH`   | Base   | Native ether                                                |
+| `SOL`   | Solana | Native lamports, no token account in the way                |
+| `USDC`  | Base   | A dollar that stays a dollar. The default                   |
+| `XAUt0` | Solana | Tether Gold, if you would rather your terminal habit bought bullion |
 
-Pick one at <https://prmpt.click/earnings>. The balance is kept in dollars and
+Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
 converted only when a payout settles, at the price right then, so switching changes
 what the next payout arrives as and nothing that has already been paid.
 
@@ -34,19 +35,23 @@ Codex, Gemini CLI and Amp.
 **macOS / Linux**
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh
+curl -fsSL https://prmpt.cash/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://prmpt.click/install.ps1 | iex
+irm https://prmpt.cash/install.ps1 | iex
 ```
 
-That detects the agents you have, wires each one up using *its own* documented
-hook, **creates a Solana wallet for you**, proves it to the backend by signature
-and stores both at mode 0600. Restart your agent and carry on working. There is
-no account to make and no code to paste.
+That downloads the latest **release**, verifies its SHA-256 against the
+`SHA256SUMS` published alongside it, detects the agents you have, wires each one
+up using *its own* documented hook, **creates a Solana wallet for you**, proves
+it to the backend by signature and stores both at mode 0600. Restart your agent
+and carry on working. There is no account to make and no code to paste.
+
+Pin a version with `--version v0.2.0`; releases are at
+[github.com/senamakel/prmpt.cash/releases](https://github.com/senamakel/prmpt.cash/releases).
 
 Already have a wallet you would rather be paid into? Import it, then sign in:
 
@@ -60,7 +65,7 @@ route still works exactly as before — prove your wallet there with a real wall
 extension and redeem the one-off code it mints:
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 ```
 
 **In Claude Code** you can install it as a plugin instead:
@@ -74,7 +79,7 @@ Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.s
 
 ```sh
 git clone https://github.com/senamakel/prmpt.cash
-./prmpt.click/install.sh
+./prmpt.cash/install.sh
 ```
 
 <details>
@@ -84,6 +89,7 @@ git clone https://github.com/senamakel/prmpt.cash
 --code <code>        redeem a dashboard install code instead of creating a
                      wallet here — use it to keep the key off this machine
 --no-login           install and wire up the agents, but create no wallet
+--version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -97,21 +103,37 @@ than appending, so you cannot end up with duplicates.
 
 ## The wallet
 
-The plugin holds its own Solana keypair and signs in with it. That is what makes
-first run self-service: Sign-In With Solana asks the server for a one-time
-challenge, signs the exact message it minted, and gets back a publisher JWT.
+**One seed phrase, two chains.** The plugin generates a BIP-39 mnemonic and
+derives both addresses from it — Solana at `m/44'/501'/0'/0'` and Base at
+`m/44'/60'/0'/0/0`, the same paths Phantom and MetaMask use. Twelve words are
+one thing to write down, and they import into either wallet unchanged.
+
+It signs in with those keys itself, which is what makes first run self-service:
+Sign-In With Solana asks the server for a one-time challenge, signs the exact
+message it minted, and gets back a publisher JWT. The Base address is then
+proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
+
+Which address gets paid follows from the token you choose: ERC-20s settle on
+Base, and SOL, TINY and XAUt0 on Solana. You choose on the dashboard.
 
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
+prmpt dashboard                 # open the web dashboard, signed in as this install
 prmpt status                    # wallet, token, expiry, endpoint — nothing secret
-prmpt wallet                    # print the address
-prmpt wallet new [--force]      # generate a fresh key
-prmpt wallet import <secret>    # adopt a key you already have (- reads stdin)
-prmpt wallet export [--json]    # print the secret key, to back it up
+prmpt wallet                    # print both addresses
+prmpt wallet mnemonic           # print the seed phrase — this is the backup
+prmpt wallet new [--force]      # generate a fresh phrase and both keys
+prmpt wallet import <secret>    # adopt a phrase, or a Solana key (- reads stdin)
+prmpt wallet export [--json]    # print the Solana secret key
 prmpt link <install-code>       # the dashboard route
-prmpt logout                    # forget the token; the key is left alone
+prmpt logout                    # forget the token; the keys are left alone
 ```
+
+**The plugin holds keys; the web holds settings.** `prmpt dashboard` mints a
+single-use two-minute code from the token already on disk and opens it in your
+browser — no wallet extension needed, and the key never leaves the machine.
+Everything worth configuring, and every number worth reading, lives there.
 
 The hook also enrols itself: an install with no token detaches a `prmpt login`
 child on the first turn and serves normally from the next one. It is never on
@@ -124,19 +146,23 @@ the turn's own clock — two round trips against a cold backend is many times th
 
 ```
 ~/.config/prmpt/wallet.json          mode 0600, the only copy
-{ "address": …, "secretKey": …, "imported": false, "createdAt": … }
+{ "address": …, "mnemonic": …, "secretKey": …, "imported": false, "createdAt": … }
 ```
 
 Anyone who can read that file can sign as you and move anything the address
 holds. It is sized for ad revenue, not savings. Three consequences worth acting
 on:
 
-- **Back it up.** `prmpt wallet export` prints a base58 key that Phantom,
-  Solflare and Backpack all import; `--json` prints the `solana-keygen` array
-  form. Lose the file without a backup and the earnings paid to that address are
-  gone with it. Neither `--uninstall` deletes it, on purpose.
-- **Or bring your own.** `prmpt wallet import` takes any of those formats, so
-  payouts can land in a wallet you already control and already back up.
+- **Back it up.** `prmpt wallet mnemonic` prints the twelve words, which restore
+  both chains in Phantom, Solflare, Backpack or MetaMask. (`prmpt wallet export`
+  still prints the Solana key alone, in base58 or `solana-keygen` array form.)
+  Lose the file without a backup and the earnings paid to those addresses are
+  gone with it. No `--uninstall` deletes it, on purpose.
+- **Or bring your own.** `prmpt wallet import` takes a seed phrase — which
+  brings both chains — or a bare Solana key, so payouts can land in a wallet you
+  already control and already back up. An imported raw key has no phrase behind
+  it, so a separate Base key is generated and stored in `evm.json`; back that up
+  too, or import a phrase instead and avoid the second file entirely.
 - **Or keep the key off the box entirely.** `prmpt link <code>` still works. The
   dashboard is the only place a real wallet prompt can open, and an install
   linked that way never has a local key at all.
@@ -162,19 +188,52 @@ It is also long-lived and **cannot be revoked**: it stays valid until it
 expires, so treat that config file as the credential it is. `prmpt logout`
 forgets it locally; it does not invalidate a copy taken beforehand.
 
+## It keeps itself up to date
+
+Once a day the hook detaches a child that asks GitHub for the latest release.
+If there is a newer one it downloads it, checks the SHA-256 against the release's
+`SHA256SUMS`, unpacks it beside the install and swaps the two by rename. Your
+agent picks it up on its next restart.
+
+```sh
+prmpt update --check              # what would happen, changing nothing
+prmpt update                      # do it now
+prmpt update --version v0.2.0     # pin a release (may be a downgrade)
+export PRMPT_NO_AUTO_UPDATE=1     # never update on its own
+```
+
+Being honest about what that does and does not guarantee:
+
+- **The checksum proves integrity, not authenticity.** `SHA256SUMS` ships as an
+  asset of the same release as the tarball, so verifying it catches a truncated
+  download or a proxy serving the wrong bytes. It does not prove the release is
+  genuine — anyone who could publish a release could publish a matching sum.
+  That trust is anchored in GitHub and in who holds release permission on the
+  repository. Detached signing is what would change that, and is not done yet.
+- **Nothing is unpacked before it verifies.** Checksum first, then extract, then
+  a check that the archive actually contains a plugin. Any failure leaves the
+  install exactly as it was.
+- **The swap is a rename, with the old tree kept until the new one lands.** If
+  the second rename fails, the old one goes back.
+- **Your credentials are never in the blast radius.** The token and wallet key
+  live in `~/.config/prmpt`, not in the install directory, so no update — or
+  failed update — can touch them. There is a test that asserts exactly this.
+- **A git checkout is never touched.** If you are developing the plugin, update
+  it with git; the auto-updater refuses outright and does not even check.
+
 ## What it looks like
 
 ```
 Sponsored · Stop re-running flaky tests until green
 Quarantine detects flaky tests from your CI history and isolates them
-https://prmpt.click/7q
+https://prmpt.cash/7q
 ```
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
 redirect: it records the click, pays you in your chosen token, and 302s to the
-advertiser. Every payout is a real Solana mainnet transaction, listed with its
-signature at <https://prmpt.click/earnings> and counted on the public
-[transparency page](https://prmpt.click/transparency).
+advertiser. Every payout is a real on-chain transaction, listed with its
+signature at <https://prmpt.cash/earnings> and counted on the public
+[transparency page](https://prmpt.cash/transparency).
 
 ## It cannot break your session
 
@@ -187,6 +246,8 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
 - **Signing in is never on the turn's clock.** Self-enrolment detaches a child
   and returns immediately; the turn that triggers it serves nothing and takes
   about as long as an exit.
+- **Neither is updating.** The daily update check costs the turn a `stat()` and
+  a `spawn()`. The download happens in a detached child, or not at all.
 - Nothing is installed but the plugin itself. No dependencies to audit.
 
 Turn it off without uninstalling:
@@ -224,28 +285,86 @@ finished turn, but neither documents a way for that hook to show you anything �
 so an ad could be matched and never displayed, and you would earn nothing from
 it. We would rather leave them out than take the impression.
 
-**The Windows installer is unverified.** `install.ps1` mirrors `install.sh`
-step for step and delegates every JSON edit to the same Node one-liners, so the
-merge behaviour is identical by construction rather than reimplemented — but it
-has not been run against a real Windows install here. Treat it as unverified
-and please report anything that does not match. `install.sh` works under WSL if
-you would rather stay on a tested path.
+**The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
+`install.sh` step for step and delegates every JSON edit to the same Node
+one-liners, so the merge behaviour is identical by construction rather than
+reimplemented. CI runs both of them on a Windows runner — install, re-install,
+uninstall, and executing the recorded command through `cmd.exe` — and checks
+the two installers write the same entry. What is still unverified is a hook
+firing inside a real Windows agent session, which needs credentials CI does not
+have. `install.sh` works under WSL if you would rather stay on the path with the
+most mileage.
 
 **The Amp integration is unverified.** It is written against Amp's documented
 plugin API but has not been run against a live Amp install. The Claude Code,
 Codex and Gemini CLI paths were tested end to end.
 
+## Releasing
+
+Releases are cut by tag. `.github/workflows/release.yml` is the only supported
+way to publish one — the installer and the updater both look for an asset named
+exactly `prmpt-<version>.tar.gz` plus a `SHA256SUMS`, and a hand-rolled release
+without them is invisible to both.
+
+```sh
+# 1. bump the version in package.json, commit it
+# 2. tag it — the tag must match package.json exactly
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The workflow refuses a tag that disagrees with `package.json`. That check is
+load-bearing: `prmpt update` compares the version baked into `package.json`
+against the release tag, so a mismatch leaves every install either re-updating
+forever or never updating again.
+
+It then runs the tests, builds the tarball from an explicit file list (no tests,
+no workflows, no `.git`), verifies the archive unpacks and runs, publishes it,
+and finally installs from the published release for real — which is the only
+place the download-and-verify path in `install.sh` is exercised, since CI
+otherwise runs the installer from a checkout.
+
 ## Development
 
 ```sh
-node --test test/*.test.mjs      # no network, no dependencies
+npm test           # the hook's own behaviour: fast, no network, no dependencies
+npm run test:smoke # installation: the installer against real agents, on this OS
+npm run test:all   # both
 ```
 
-The suite spawns the real hook and the real CLI as subprocesses against stub
+`npm test` spawns the real hook and the real CLI as subprocesses against stub
 servers on ephemeral ports, so it exercises exit codes, streams and the wire
 rather than internal functions. The stub verifies SIWS signatures the same way
 `backend/internal/auth/siws.go` does — against the exact message it minted — so
 a client that rebuilt the message locally fails there rather than in production.
+
+`npm run test:smoke` covers the step before that one, which is easy to get wrong
+and impossible to notice: running the installer for real, then executing the
+exact command string it wrote into each agent's config, on the platform that
+would have to execute it. Everything it has found so far installed cleanly,
+reported success, and never ran —
+
+- an unquoted hook path, so any install directory containing a space broke it
+  (`Application Support`, or a Windows user named `Jane Smith`);
+- a Git Bash install recording an MSYS path (`/c/Users/...`) that no native
+  Windows agent can resolve;
+- `install.ps1` failing its own Node version check on every version of Node,
+  because PowerShell does not escape quotes inside an argument to a native
+  command — it had never worked;
+- `Set-Content -Encoding utf8` writing a BOM, after which the merge step refused
+  to touch its own freshly created file and wired up nothing;
+- PowerShell dropping an empty-string argument, which shifted every later value
+  along by one and lost the hook path entirely.
+
+CI runs it on Linux, macOS and Windows, and a second job installs Claude Code,
+Codex and Gemini CLI from npm and runs the installer next to them. All three
+install unauthenticated, so everything short of a live turn is testable —
+autodetection, `claude plugin validate --strict`, and the hook serving a real
+sponsored block through each host's documented payload. What CI cannot do is
+watch a hook fire inside a real session; that needs credentials, and the suite
+says so rather than implying otherwise.
+
+The smoke suite skips any agent that is not installed, so it is useful locally
+with only the agents you happen to have. In CI a skip is a failure.
 
 Point at a local backend:
 

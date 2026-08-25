@@ -1,14 +1,14 @@
 {
   "name": "prmpt",
-  "version": "0.1.0",
-  "description": "End-of-turn sponsored-line hook for coding agents. Get paid 70% of the click price on Solana, in USDC, SOL, cbBTC, TINY or XAUt0.",
+  "version": "0.2.0",
+  "description": "End-of-turn sponsored-line hook for coding agents. Get paid 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana.",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/senamakel/prmpt.cash.git"
   },
-  "homepage": "https://prmpt.click",
+  "homepage": "https://prmpt.cash",
   "bugs": {
     "url": "https://github.com/senamakel/prmpt.cash/issues"
   },
@@ -39,6 +39,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "node --test test/smoke/installer.smoke.test.mjs test/smoke/agents.smoke.test.mjs test/smoke/windows.smoke.test.mjs",
+    "test:all": "npm test && npm run test:smoke"
   }
 }

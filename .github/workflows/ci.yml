@@ -22,21 +22,15 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node --test test/*.test.mjs
 
-  installer:
-    name: installer (shellcheck + end to end)
+  lint:
+    name: shell lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: sh -n install.sh
       - run: shellcheck -s sh install.sh || true
-      - name: install into a sandbox HOME, twice, then uninstall
-        run: |
-          set -eux
-          export HOME="$(mktemp -d)"
-          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
-          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
-          # Running twice must not stack duplicate hook entries.
-          n=$(grep -c 'turn-end.mjs' "$HOME/.claude/settings.json")
-          test "$n" -eq 1
-          ./install.sh --uninstall --dir "$HOME/app"
-          ! grep -q 'turn-end.mjs' "$HOME/.claude/settings.json"
+
+  # End-to-end installation — install.sh and install.ps1 on Linux, macOS and
+  # Windows, and against the real Claude Code / Codex / Gemini CLI — lives in
+  # smoke.yml. It used to be a single ubuntu job here, which meant every
+  # Windows and macOS installation bug shipped.

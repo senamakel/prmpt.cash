@@ -1,10 +1,10 @@
 {
   "name": "prmpt",
   "version": "0.1.0",
-  "description": "Get paid for the coding-agent turns you already run. Prints one clearly-labelled sponsored line when a turn genuinely matches an advertiser, and pays you 70% of the click price on Solana in USDC, SOL, cbBTC, TINY or XAUt0.",
+  "description": "Get paid for the coding-agent turns you already run. Prints one clearly-labelled sponsored line when a turn genuinely matches an advertiser, and pays you 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana.",
   "author": {
-    "name": "prmpt.click",
-    "url": "https://prmpt.click"
+    "name": "prmpt.cash",
+    "url": "https://prmpt.cash"
   },
   "homepage": "https://github.com/senamakel/prmpt.cash",
   "license": "MIT",

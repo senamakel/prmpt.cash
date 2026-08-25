@@ -22,7 +22,7 @@ Then export your key (Amp inherits your shell environment):
 
 ```bash
 export PRMPT_TOKEN="eyJhbGciOi..."
-export PRMPT_ENDPOINT="https://api.prmpt.click/graphql"   # optional, this is the default
+export PRMPT_ENDPOINT="https://api.prmpt.cash/graphql"   # optional, this is the default
 export PRMPT_INSTALL_ID="..."                           # from link.mjs
 export PRMPT_DISABLED=1                                 # turn serving off
 ```

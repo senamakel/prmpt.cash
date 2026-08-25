@@ -41,12 +41,12 @@ function startStub({ onVerify = () => {} } = {}) {
         // Shaped like the real one, including the parts a client cannot know:
         // the domain, the chain id and the issued-at all come from the server.
         const message = [
-          'prmpt.click wants you to sign in with your Solana account:',
+          'prmpt.cash wants you to sign in with your Solana account:',
           variables.wallet,
           '',
           'Sign in to your prmpt publisher account. This proves you own this wallet.',
           '',
-          'URI: https://prmpt.click',
+          'URI: https://prmpt.cash',
           'Version: 1',
           'Chain ID: solana:mainnet',
           `Nonce: ${nonce}`,
