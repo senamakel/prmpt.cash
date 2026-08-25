@@ -82,6 +82,21 @@ export function smokeEnv(home, extra = {}) {
     XDG_CONFIG_HOME: path.join(home, '.config'),
     XDG_DATA_HOME: path.join(home, '.local', 'share'),
     NO_COLOR: '1',
+    // These three are the reason this suite cannot touch anything real, and
+    // they belong HERE rather than at each call site -- a smoke test that
+    // forgets one does not fail, it quietly does the damage:
+    //
+    //   NO_LOGIN      the installer defaults to signing in against the DEFAULT
+    //                 endpoint, which is production. Without this, every run on
+    //                 every OS in the matrix creates a real publisher account
+    //                 behind a wallet that dies with the runner. It did.
+    //   NO_AUTO_ENROL the hook enrols itself when it finds no token, so even a
+    //                 test that never runs the installer can reach production.
+    //   NO_AUTO_UPDATE an installed copy is not a git checkout, so the hook
+    //                 would spawn a daily updater against api.github.com.
+    PRMPT_NO_LOGIN: '1',
+    PRMPT_NO_AUTO_ENROL: '1',
+    PRMPT_NO_AUTO_UPDATE: '1',
   };
   if (IS_WINDOWS) {
     env.USERPROFILE = home;

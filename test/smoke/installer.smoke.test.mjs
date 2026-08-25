@@ -45,7 +45,7 @@ test('--help exits 0 and documents every flag', async () => {
   const box = sandbox();
   const res = await install(box, ['--help']);
   assert.equal(res.code, 0, res.stderr);
-  for (const flag of ['--code', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
+  for (const flag of ['--code', '--no-login', '--version', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
     assert.ok(res.stdout.includes(flag), `--help does not mention ${flag}`);
   }
 });
@@ -400,6 +400,23 @@ test('a backend that refuses the code leaves the machine untouched', async () =>
   } finally {
     await server.close();
   }
+});
+
+test('a default install contacts nothing and creates no credentials', async () => {
+  // The guard rail for this whole suite. smokeEnv sets PRMPT_NO_LOGIN=1; if that
+  // ever stops being honoured, this fails here instead of silently creating a
+  // publisher account on production from five matrix jobs and a weekly cron.
+  const box = sandbox();
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+
+  const configDir = path.join(box.home, '.config', 'prmpt');
+  assert.equal(fs.existsSync(path.join(configDir, 'wallet.json')), false,
+    'installing must not create a wallet');
+  assert.equal(fs.existsSync(path.join(configDir, 'config.json')), false,
+    'installing must not store a token');
+  // And it should say why it stayed silent, rather than looking linked.
+  assert.ok(/no-login|stay silent/i.test(res.stdout + res.stderr), res.stdout + res.stderr);
 });
 
 test('with no agents selected and none present, the installer says so and fails', async () => {

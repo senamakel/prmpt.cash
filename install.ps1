@@ -41,6 +41,7 @@
 param(
   [string] $Code     = $env:PRMPT_CODE,
   [switch] $NoLogin,
+  [string] $Version  = $env:PRMPT_VERSION,
   [string] $Agents   = $env:PRMPT_AGENTS,
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
@@ -50,7 +51,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# PRMPT_NO_LOGIN=1 is -NoLogin by environment, for scripted installs that cannot
+# easily pass a switch. Without it the installer signs in against the default
+# endpoint -- production -- and creates a real publisher behind a throwaway wallet.
+if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
+
 $RepoUrl         = 'https://github.com/senamakel/prmpt.click.git'
+$RepoSlug        = 'senamakel/prmpt.click'
+# The fallback only; normal installs come from a published release.
 $ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.click/zip/refs/heads/main'
 $DefaultEndpoint = 'https://api.prmpt.click/graphql'
 
@@ -218,30 +226,93 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
   } else {
     Write-Ok "using $Dir"
   }
-} elseif (Get-Command git -ErrorAction SilentlyContinue) {
-  if (Test-Path (Join-Path $Dir '.git')) {
-    & git -C $Dir fetch -q origin main
-    & git -C $Dir reset -q --hard origin/main
-    Write-Ok "updated $Dir"
-  } else {
-    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
-    & git clone -q --depth 1 $RepoUrl $Dir
-    Write-Ok "cloned to $Dir"
-  }
 } else {
-  # No git: fall back to the zipball.
+  # Normal installs come from a published release, so what lands here is a
+  # specific, checksummed version rather than whatever main happened to be.
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("prmpt-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-  $zip = Join-Path $tmp 'prmpt.zip'
-  Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zip
-  Expand-Archive -Path $zip -DestinationPath $tmp -Force
-  $inner = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
-  if (-not $inner) { Die 'the downloaded archive was empty.' }
-  if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
-  New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-  Copy-Item -Recurse -Force (Join-Path $inner.FullName '*') $Dir
-  Remove-Item -Recurse -Force $tmp
-  Write-Ok "downloaded to $Dir"
+
+  $api = if ($Version) {
+    "https://api.github.com/repos/$RepoSlug/releases/tags/$Version"
+  } else {
+    "https://api.github.com/repos/$RepoSlug/releases/latest"
+  }
+
+  $rel = $null
+  try {
+    $rel = Invoke-RestMethod -UseBasicParsing -Uri $api -Headers @{
+      'User-Agent' = 'prmpt-install'; 'Accept' = 'application/vnd.github+json'
+    }
+  } catch { $rel = $null }
+
+  $tarAsset  = $null
+  $sumsAsset = $null
+  if ($rel) {
+    $tag     = [string]$rel.tag_name
+    $relVer  = $tag -replace '^v', ''
+    $assetNm = "prmpt-$relVer.tar.gz"
+    $tarAsset  = $rel.assets | Where-Object { $_.name -eq $assetNm }  | Select-Object -First 1
+    $sumsAsset = $rel.assets | Where-Object { $_.name -eq 'SHA256SUMS' } | Select-Object -First 1
+  }
+
+  if ($tarAsset -and $sumsAsset) {
+    $tarPath  = Join-Path $tmp $tarAsset.name
+    $sumsPath = Join-Path $tmp 'SHA256SUMS'
+    Invoke-WebRequest -UseBasicParsing -Uri $tarAsset.browser_download_url  -OutFile $tarPath
+    Invoke-WebRequest -UseBasicParsing -Uri $sumsAsset.browser_download_url -OutFile $sumsPath
+
+    # Verify before unpacking, never after: an unverified archive must not be
+    # written over an install directory.
+    $expected = $null
+    foreach ($line in (Get-Content $sumsPath)) {
+      if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$' -and
+          [System.IO.Path]::GetFileName($Matches[2]) -eq $tarAsset.name) {
+        $expected = $Matches[1].ToLower()
+      }
+    }
+    if (-not $expected) { Die "$($tarAsset.name) is not listed in SHA256SUMS for $tag" }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $tarPath).Hash.ToLower()
+    if ($actual -ne $expected) {
+      Die "checksum mismatch for $($tarAsset.name)`n  expected $expected`n  got      $actual"
+    }
+
+    # tar.exe has shipped in Windows since build 17063; every supported host has it.
+    $unpack = Join-Path $tmp 'unpack'
+    New-Item -ItemType Directory -Force -Path $unpack | Out-Null
+    & tar xzf $tarPath -C $unpack
+    if ($LASTEXITCODE -ne 0) { Die "could not unpack $($tarAsset.name)" }
+
+    $root = $unpack
+    if (-not (Test-Path (Join-Path $root 'hooks\turn-end.mjs'))) {
+      $inner = Get-ChildItem -Path $unpack -Directory | Select-Object -First 1
+      if (-not $inner -or -not (Test-Path (Join-Path $inner.FullName 'hooks\turn-end.mjs'))) {
+        Die "$($tarAsset.name) does not contain a plugin"
+      }
+      $root = $inner.FullName
+    }
+
+    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $root '*') $Dir
+    Remove-Item -Recurse -Force $tmp
+    Write-Ok "installed $tag to $Dir (sha256 verified)"
+  } elseif ($Version) {
+    Die "no release $Version with an installable tarball. See https://github.com/$RepoSlug/releases"
+  } else {
+    # No release yet, or the API is unreachable. Fall back to main so a first
+    # install still works before the first tag is cut, and say so plainly.
+    Write-Warn 'no published release found; falling back to main (not checksummed)'
+    $zip = Join-Path $tmp 'prmpt.zip'
+    Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zip
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    $inner = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+    if (-not $inner) { Die 'the downloaded archive was empty.' }
+    if (Test-Path $Dir) { Remove-Item -Recurse -Force $Dir }
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $inner.FullName '*') $Dir
+    Remove-Item -Recurse -Force $tmp
+    Write-Ok "downloaded main to $Dir"
+  }
 }
 
 $Hook = Join-Path $Dir 'hooks\turn-end.mjs'

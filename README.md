@@ -27,10 +27,14 @@ curl -fsSL https://prmpt.click/install.sh | sh
 irm https://prmpt.click/install.ps1 | iex
 ```
 
-That detects the agents you have, wires each one up using *its own* documented
-hook, **creates a Solana wallet for you**, proves it to the backend by signature
-and stores both at mode 0600. Restart your agent and carry on working. There is
-no account to make and no code to paste.
+That downloads the latest **release**, verifies its SHA-256 against the
+`SHA256SUMS` published alongside it, detects the agents you have, wires each one
+up using *its own* documented hook, **creates a Solana wallet for you**, proves
+it to the backend by signature and stores both at mode 0600. Restart your agent
+and carry on working. There is no account to make and no code to paste.
+
+Pin a version with `--version v0.2.0`; releases are at
+[github.com/senamakel/prmpt.click/releases](https://github.com/senamakel/prmpt.click/releases).
 
 Already have a wallet you would rather be paid into? Import it, then sign in:
 
@@ -61,6 +65,7 @@ git clone https://github.com/senamakel/prmpt.click
 --code <code>        redeem a dashboard install code instead of creating a
                      wallet here — use it to keep the key off this machine
 --no-login           install and wire up the agents, but create no wallet
+--version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -139,6 +144,39 @@ It is also long-lived and **cannot be revoked**: it stays valid until it
 expires, so treat that config file as the credential it is. `prmpt logout`
 forgets it locally; it does not invalidate a copy taken beforehand.
 
+## It keeps itself up to date
+
+Once a day the hook detaches a child that asks GitHub for the latest release.
+If there is a newer one it downloads it, checks the SHA-256 against the release's
+`SHA256SUMS`, unpacks it beside the install and swaps the two by rename. Your
+agent picks it up on its next restart.
+
+```sh
+prmpt update --check              # what would happen, changing nothing
+prmpt update                      # do it now
+prmpt update --version v0.2.0     # pin a release (may be a downgrade)
+export PRMPT_NO_AUTO_UPDATE=1     # never update on its own
+```
+
+Being honest about what that does and does not guarantee:
+
+- **The checksum proves integrity, not authenticity.** `SHA256SUMS` ships as an
+  asset of the same release as the tarball, so verifying it catches a truncated
+  download or a proxy serving the wrong bytes. It does not prove the release is
+  genuine — anyone who could publish a release could publish a matching sum.
+  That trust is anchored in GitHub and in who holds release permission on the
+  repository. Detached signing is what would change that, and is not done yet.
+- **Nothing is unpacked before it verifies.** Checksum first, then extract, then
+  a check that the archive actually contains a plugin. Any failure leaves the
+  install exactly as it was.
+- **The swap is a rename, with the old tree kept until the new one lands.** If
+  the second rename fails, the old one goes back.
+- **Your credentials are never in the blast radius.** The token and wallet key
+  live in `~/.config/prmpt`, not in the install directory, so no update — or
+  failed update — can touch them. There is a test that asserts exactly this.
+- **A git checkout is never touched.** If you are developing the plugin, update
+  it with git; the auto-updater refuses outright and does not even check.
+
 ## What it looks like
 
 ```
@@ -161,6 +199,8 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
 - **Signing in is never on the turn's clock.** Self-enrolment detaches a child
   and returns immediately; the turn that triggers it serves nothing and takes
   about as long as an exit.
+- **Neither is updating.** The daily update check costs the turn a `stat()` and
+  a `spawn()`. The download happens in a detached child, or not at all.
 - Nothing is installed but the plugin itself. No dependencies to audit.
 
 Turn it off without uninstalling:
@@ -211,6 +251,30 @@ most mileage.
 **The Amp integration is unverified.** It is written against Amp's documented
 plugin API but has not been run against a live Amp install. The Claude Code,
 Codex and Gemini CLI paths were tested end to end.
+
+## Releasing
+
+Releases are cut by tag. `.github/workflows/release.yml` is the only supported
+way to publish one — the installer and the updater both look for an asset named
+exactly `prmpt-<version>.tar.gz` plus a `SHA256SUMS`, and a hand-rolled release
+without them is invisible to both.
+
+```sh
+# 1. bump the version in package.json, commit it
+# 2. tag it — the tag must match package.json exactly
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The workflow refuses a tag that disagrees with `package.json`. That check is
+load-bearing: `prmpt update` compares the version baked into `package.json`
+against the release tag, so a mismatch leaves every install either re-updating
+forever or never updating again.
+
+It then runs the tests, builds the tarball from an explicit file list (no tests,
+no workflows, no `.git`), verifies the archive unpacks and runs, publishes it,
+and finally installs from the published release for real — which is the only
+place the download-and-verify path in `install.sh` is exercised, since CI
+otherwise runs the installer from a checkout.
 
 ## Development
 
