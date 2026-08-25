@@ -1,7 +1,7 @@
 {
   "name": "prmpt",
   "version": "0.1.0",
-  "description": "Surfaces a single, clearly-labelled sponsored line at the end of an agent turn and pays the developer 70% of the click price in USDC on Solana.",
+  "description": "Get paid for the coding-agent turns you already run. Prints one clearly-labelled sponsored line when a turn genuinely matches an advertiser, and pays you 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana.",
   "author": {
     "name": "prmpt.cash",
     "url": "https://prmpt.cash"
@@ -13,7 +13,8 @@
     "sponsorship",
     "monetization",
     "solana",
-    "usdc"
+    "earnings",
+    "passive-income"
   ],
   "hooks": "./hooks/hooks.json",
   "repository": "https://github.com/senamakel/prmpt.cash"

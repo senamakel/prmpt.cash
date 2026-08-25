@@ -1,12 +1,28 @@
 # prmpt.cash
 
-**Get paid for using your coding agent.**
+**Get paid for the coding-agent turns you already run.**
 
 When your agent finishes a reply, this hook asks whether any advertiser genuinely
 matches what you just did. Almost always the answer is no and nothing prints. On a
 match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
-price lands in your wallet**, usually within a second — in USDC, cbBTC or ETH on
-Base, or SOL, TINY or XAUt0 on Solana, whichever you pick.
+price lands in your wallet**, usually within a second, in whichever token you
+picked.
+
+You never had to sell anything, watch anything or click anything. Advertisers are
+paying for the moment a real problem is on your screen, and this is your share of it.
+
+| Token   | Chain  | What it is                                                  |
+| ------- | ------ | ----------------------------------------------------------- |
+| `TINY`  | Solana | Tiny Humans. The one most people take: stacked passively out of ad revenue, at no cost to you |
+| `cbBTC` | Base   | Bitcoin, one to one                                         |
+| `ETH`   | Base   | Native ether                                                |
+| `SOL`   | Solana | Native lamports, no token account in the way                |
+| `USDC`  | Base   | A dollar that stays a dollar. The default                   |
+| `XAUt0` | Solana | Tether Gold, if you would rather your terminal habit bought bullion |
+
+Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
+converted only when a payout settles, at the price right then, so switching changes
+what the next payout arrives as and nothing that has already been paid.
 
 It creates the wallet itself, so installing is one command with nothing to sign
 up for. Zero runtime dependencies. Plain ESM. Node 18+. Works with Claude Code,
@@ -50,6 +66,13 @@ extension and redeem the one-off code it mints:
 
 ```sh
 curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
+```
+
+**In Claude Code** you can install it as a plugin instead:
+
+```
+/plugin marketplace add senamakel/prmpt.cash
+/plugin install prmpt@prmpt
 ```
 
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
@@ -207,7 +230,10 @@ https://prmpt.cash/7q
 ```
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
-redirect: it records the click, pays you, and 302s to the advertiser.
+redirect: it records the click, pays you in your chosen token, and 302s to the
+advertiser. Every payout is a real on-chain transaction, listed with its
+signature at <https://prmpt.cash/earnings> and counted on the public
+[transparency page](https://prmpt.cash/transparency).
 
 ## It cannot break your session
 

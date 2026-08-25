@@ -1,0 +1,33 @@
+{
+  "name": "prmpt",
+  "owner": {
+    "name": "prmpt.cash",
+    "url": "https://prmpt.cash"
+  },
+  "metadata": {
+    "description": "Get paid for the coding-agent turns you already run.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "prmpt",
+      "source": "./",
+      "description": "Prints one clearly-labelled sponsored line at the end of a turn that genuinely matches an advertiser, and pays you 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana. Most turns match nothing and print nothing.",
+      "version": "0.1.0",
+      "author": {
+        "name": "prmpt.cash",
+        "url": "https://prmpt.cash"
+      },
+      "homepage": "https://prmpt.cash",
+      "repository": "https://github.com/senamakel/prmpt.cash",
+      "license": "MIT",
+      "keywords": [
+        "ads",
+        "sponsorship",
+        "monetization",
+        "solana",
+        "earnings"
+      ]
+    }
+  ]
+}
