@@ -68,35 +68,73 @@ test('status on a fresh machine reports no wallet and no token', async () => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
-test('wallet new creates a key, and refuses to clobber it without --force', async () => {
+/** The Solana and Base addresses `prmpt wallet` prints, in that order. */
+function addresses(stdout) {
+  return {
+    solana: stdout.match(/solana\s+(\S+)/)[1],
+    base: stdout.match(/base\s+(\S+)/)[1],
+  };
+}
+
+test('wallet new creates both chains from one phrase, and refuses to clobber it', async () => {
   const home = tempHome();
 
   const created = await prmpt(['wallet', 'new'], home);
   assert.equal(created.code, 0);
-  const address = created.stdout.match(/new wallet (\S+)/)[1];
+  const solana = created.stdout.match(/solana:\s+(\S+)/)[1];
+  const base = created.stdout.match(/base:\s+(\S+)/)[1];
+  assert.match(base, /^0x[0-9a-fA-F]{40}$/);
 
-  const shown = await prmpt(['wallet'], home);
-  assert.equal(shown.stdout.trim(), address);
+  const shown = addresses((await prmpt(['wallet'], home)).stdout);
+  assert.equal(shown.solana, solana);
+  assert.equal(shown.base, base);
+
+  // The phrase is the backup, and it must actually be printable -- an install
+  // whose only copy of the key cannot be written down is not backed up.
+  const phrase = await prmpt(['wallet', 'mnemonic'], home);
+  assert.equal(phrase.code, 0);
+  assert.equal(phrase.stdout.trim().split(/\s+/).length, 12);
 
   const refused = await prmpt(['wallet', 'new'], home);
   assert.equal(refused.code, 1);
   assert.match(refused.stderr, /already exists/);
   assert.match(refused.stderr, /--force/);
   // Refusing means refusing: the key on disk is untouched.
-  assert.equal((await prmpt(['wallet'], home)).stdout.trim(), address);
+  assert.deepEqual(addresses((await prmpt(['wallet'], home)).stdout), shown);
 
   const forced = await prmpt(['wallet', 'new', '--force'], home);
   assert.equal(forced.code, 0);
-  assert.notEqual((await prmpt(['wallet'], home)).stdout.trim(), address);
-  assert.match(forced.stdout, new RegExp(`replaced: ${address}`));
+  const replaced = addresses((await prmpt(['wallet'], home)).stdout);
+  assert.notEqual(replaced.solana, solana);
+  // Both chains move together: they come from one phrase, so a new phrase
+  // must not leave the Base address pointing at the old wallet.
+  assert.notEqual(replaced.base, base);
+  assert.match(forced.stdout, new RegExp(`replaced: ${solana}`));
 
   fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('a seed phrase imports both chains and derives the same addresses', async () => {
+  const source = tempHome();
+  await prmpt(['wallet', 'new'], source);
+  const original = addresses((await prmpt(['wallet'], source)).stdout);
+  const phrase = (await prmpt(['wallet', 'mnemonic'], source)).stdout.trim();
+
+  const target = tempHome();
+  const imported = await prmpt(['wallet', 'import', phrase], target);
+  assert.equal(imported.code, 0, imported.stderr);
+  // Same phrase, same wallet, on both chains -- which is the whole reason the
+  // phrase is what we ask people to back up.
+  assert.deepEqual(addresses((await prmpt(['wallet'], target)).stdout), original);
+
+  fs.rmSync(source, { recursive: true, force: true });
+  fs.rmSync(target, { recursive: true, force: true });
 });
 
 test('export round-trips through import, in both formats', async () => {
   const source = tempHome();
   await prmpt(['wallet', 'new'], source);
-  const address = (await prmpt(['wallet'], source)).stdout.trim();
+  const address = addresses((await prmpt(['wallet'], source)).stdout).solana;
 
   for (const flags of [[], ['--json']]) {
     const exported = await prmpt(['wallet', 'export', ...flags], source);
@@ -108,7 +146,9 @@ test('export round-trips through import, in both formats', async () => {
     const target = tempHome();
     const imported = await prmpt(['wallet', 'import', exported.stdout.trim()], target);
     assert.equal(imported.code, 0, imported.stderr);
-    assert.equal((await prmpt(['wallet'], target)).stdout.trim(), address);
+    // A RAW key round-trips the Solana address only: no phrase exists behind
+    // it, so the Base address on the far side is a freshly generated one.
+    assert.equal(addresses((await prmpt(['wallet'], target)).stdout).solana, address);
     fs.rmSync(target, { recursive: true, force: true });
   }
 
@@ -118,7 +158,7 @@ test('export round-trips through import, in both formats', async () => {
 test('import reads the key from stdin when given -', async () => {
   const source = tempHome();
   await prmpt(['wallet', 'new'], source);
-  const address = (await prmpt(['wallet'], source)).stdout.trim();
+  const address = addresses((await prmpt(['wallet'], source)).stdout).solana;
   const secret = (await prmpt(['wallet', 'export'], source)).stdout.trim();
 
   const target = tempHome();
@@ -130,7 +170,7 @@ test('import reads the key from stdin when given -', async () => {
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
   });
-  assert.equal((await prmpt(['wallet'], target)).stdout.trim(), address);
+  assert.equal(addresses((await prmpt(['wallet'], target)).stdout).solana, address);
 
   fs.rmSync(source, { recursive: true, force: true });
   fs.rmSync(target, { recursive: true, force: true });

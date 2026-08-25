@@ -13,6 +13,7 @@
 
 import process from 'node:process';
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 import {
@@ -26,14 +27,16 @@ import {
   walletPath,
   loadWallet,
   saveWallet,
-  generateWallet,
+  generateMnemonicWallet,
   walletFromSecret,
+  walletFromMnemonic,
 } from '../hooks/lib/wallet.mjs';
+import { ensureEvmWallet, evmWalletPath } from '../hooks/lib/evm.mjs';
 import { loginWithWallet } from '../hooks/lib/login.mjs';
 import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
-import { exchangeInstallCode } from '../hooks/lib/api.mjs';
+import { exchangeInstallCode, createWebSession } from '../hooks/lib/api.mjs';
 import { normalizeCode, validateCode } from '../hooks/lib/install-code.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
@@ -71,14 +74,23 @@ usage: prmpt <command> [options]
   status                     Wallet, token and endpoint for this install.
   logout                     Forget the token. The wallet file is left alone.
 
-  wallet                     Show the wallet address (same as 'wallet show').
-  wallet new [--force]       Generate a fresh wallet. Refuses to overwrite one
-                             unless --force, because there is no undo.
-  wallet import <secret>     Adopt an existing key. Accepts base58 (Phantom and
-                             Solflare "export private key") or a solana-keygen
-                             JSON array. Pass - to read it from stdin.
-  wallet export [--json]     Print the secret key. Only ever do this to back it up.
-  wallet path                Where the key file lives.
+  dashboard                  Open the web dashboard signed in as this install.
+                             Your keys stay here; the browser gets a two-minute
+                             single-use code. Everything configurable -- payout
+                             token, earnings, history -- lives there.
+
+  wallet                     Show both addresses (same as 'wallet show').
+  wallet new [--force]       Generate a fresh seed phrase and both wallets.
+                             Refuses to overwrite one unless --force: there is
+                             no undo and the old address keeps any earnings.
+  wallet mnemonic            Print the seed phrase. This is the backup.
+  wallet import <secret>     Adopt an existing key. Accepts a BIP-39 seed phrase
+                             (both chains), or a Solana key as base58 (Phantom
+                             and Solflare "export private key") or a
+                             solana-keygen JSON array. Pass - to read stdin.
+  wallet export [--json]     Print the Solana secret key. Only to back it up --
+                             prefer 'wallet mnemonic', which covers both chains.
+  wallet path                Where the key files live.
 
   update [--check]           Update this install to the latest GitHub release.
                              --check reports without changing anything;
@@ -104,9 +116,14 @@ ${RELEASE_REPO} for a newer release and, if there is one, verifies its
 checksum and swaps this directory for it. Your token and wallet key live in
 ~/.config/prmpt and are never touched by that.
 
-The wallet is a hot wallet: a cleartext key at mode 0600 under your home
-directory. It holds ad revenue, not savings. Back it up, and prefer
-'wallet import' if you would rather be paid into a wallet you already have.`;
+One seed phrase holds both chains: a Solana address (SOL, TINY, XAUt0) and a
+Base address (USDC, cbBTC, ETH). Which one is paid follows from the token you
+choose on the dashboard.
+
+It is a hot wallet: a cleartext key at mode 0600 under your home directory. It
+holds ad revenue, not savings. Back up the phrase with 'wallet mnemonic', and
+prefer 'wallet import' if you would rather be paid into a wallet you already
+have.`;
 
 // --- commands ---------------------------------------------------------------
 
@@ -121,26 +138,44 @@ async function cmdLogin(args) {
   if (result.walletCreated) {
     out('prmpt: created a wallet for this install.');
     out('');
-    out(`  ${result.wallet.address}`);
+    out(`  Solana  ${result.wallet.address}`);
+    out(`  Base    ${result.evm.address}`);
     out('');
-    out(`  The key is at ${walletPath()} (mode 0600) and is the only copy.`);
-    out("  Back it up with 'prmpt wallet export' -- if you lose it, the earnings");
-    out('  paid to that address are gone with it.');
+    out('  Both come from one seed phrase, stored in cleartext at');
+    out(`  ${walletPath()} (mode 0600). It is the only copy.`);
+    out("  Write it down now:  prmpt wallet mnemonic");
+    out('  If you lose it, the earnings paid to those addresses are gone with it.');
     out('');
   } else if (before) {
     out(`prmpt: signed in as ${result.wallet.address}`);
   }
 
   out('prmpt: linked.');
-  out(`  wallet:     ${result.wallet.address}`);
+  out(`  solana:     ${result.wallet.address}`);
+  out(`  base:       ${result.evm.address}${result.evmLinked ? '' : '  (NOT LINKED)'}`);
   out(`  install id: ${result.installId}`);
   out(`  token:      ${mask(result.token)}  (stored, not shown)`);
   if (result.expiresAt) out(`  expires:    ${result.expiresAt}`);
   out(`  endpoint:   ${result.endpoint}`);
   out(`  config:     ${result.configFile} (0600)`);
+  if (result.payoutToken) {
+    out(`  paid in:    ${result.payoutToken}${result.payoutChain ? ` on ${result.payoutChain}` : ''}`);
+  }
   out('');
+
+  // A failed Base link is reported rather than swallowed: the install still
+  // works and still earns, but only in the Solana-settled currencies, and the
+  // default token is not one of them.
+  if (!result.evmLinked) {
+    err(`prmpt: warning -- could not link the Base address: ${result.evmError}`);
+    err('  Solana payouts (SOL, TINY, XAUt0) still work. ERC-20 earnings will');
+    err("  accrue but cannot be sent until this succeeds. Re-run 'prmpt login'.");
+    err('');
+  }
+
   out('Clicks on ads served from this install now pay 70% of the clearing price');
-  out('to that wallet in USDC. Set PRMPT_DISABLED=1 to turn serving off.');
+  out('to your wallet, in whichever token you choose. Change it, and see what you');
+  out("have earned, with 'prmpt dashboard'. Set PRMPT_DISABLED=1 to stop serving.");
   out('');
   out('The token cannot be revoked from here or anywhere else -- it is valid until');
   out('it expires. Treat the config file as a credential.');
@@ -238,7 +273,37 @@ function cmdWallet(args) {
     case 'address': {
       const wallet = loadWallet();
       if (!wallet) throw new UserError("no wallet yet -- run 'prmpt login' or 'prmpt wallet new'");
-      out(wallet.address);
+      const { wallet: evm, stored } = ensureEvmWallet(wallet);
+      out(`solana  ${wallet.address}`);
+      out(`base    ${evm.address}`);
+      if (!wallet.mnemonic) {
+        // A raw-key install has two unrelated secrets, and the Base one was
+        // generated here rather than derived. Saying so is the difference
+        // between backing up one file and losing the other.
+        err('');
+        err('prmpt: this install has no seed phrase -- its two keys are unrelated.');
+        err(`  Solana key: ${walletPath()}`);
+        if (stored) err(`  Base key:   ${evmWalletPath()}  (generated, back it up separately)`);
+      }
+      return;
+    }
+
+    case 'mnemonic':
+    case 'phrase': {
+      const wallet = loadWallet();
+      if (!wallet) throw new UserError("no wallet yet -- run 'prmpt login' or 'prmpt wallet new'");
+      if (!wallet.mnemonic) {
+        throw new UserError(
+          'this wallet has no seed phrase behind it -- it was imported as a raw key, or\n' +
+          '  created before phrases existed. There is no phrase that derives it, so back\n' +
+          `  up ${walletPath()} and ${evmWalletPath()} instead.`,
+        );
+      }
+      out(wallet.mnemonic);
+      err('');
+      err('prmpt: those twelve words ARE your wallet, on both chains.');
+      err('Anyone who reads them can take everything the addresses hold. Write them');
+      err('on paper; do not put them in a password manager you also lose access to.');
       return;
     }
 
@@ -256,29 +321,41 @@ function cmdWallet(args) {
           '  Replacing it abandons anything the old address has earned.',
         );
       }
-      const wallet = generateWallet();
+      const wallet = generateMnemonicWallet();
       const file = saveWallet(wallet);
-      out(`prmpt: new wallet ${wallet.address}`);
+      const { wallet: evm } = ensureEvmWallet(wallet);
+      out(`prmpt: new wallet`);
+      out(`  solana:   ${wallet.address}`);
+      out(`  base:     ${evm.address}`);
       out(`  key file: ${file} (0600)`);
       if (existing) out(`  replaced: ${existing.address}`);
       out('');
-      out("Run 'prmpt login' to prove it to the backend and start earning.");
+      out("Write the phrase down now:  prmpt wallet mnemonic");
+      out("Then run 'prmpt login' to prove it to the backend and start earning.");
       return;
     }
 
     case 'import': {
-      const [source] = rest;
-      if (!source) throw new UserError("usage: prmpt wallet import <secret-key>  (or - for stdin)");
+      const source = rest.length > 0 ? rest.join(' ') : '';
+      if (!source) throw new UserError("usage: prmpt wallet import <secret-key|seed phrase>  (or - for stdin)");
       const secret = source === '-' ? fs.readFileSync(0, 'utf8') : source;
 
-      const wallet = walletFromSecret(secret);
+      // A multi-word input is a seed phrase, which imports BOTH chains; a
+      // single token is a bare Solana key, which can only ever be the one.
+      // Deciding by shape rather than by a flag means the user pastes what they
+      // have and it works.
+      const looksLikeMnemonic = secret.trim().split(/\s+/u).length > 1;
+      const wallet = looksLikeMnemonic ? walletFromMnemonic(secret) : walletFromSecret(secret);
       const existing = safeLoadWallet();
       if (existing && existing.address === wallet.address) {
         out(`prmpt: ${wallet.address} is already the wallet here; nothing changed.`);
         return;
       }
       const file = saveWallet(wallet, { imported: true });
+      const { wallet: evm } = ensureEvmWallet(wallet);
       out(`prmpt: imported ${wallet.address}`);
+      out(`  solana:   ${wallet.address}`);
+      out(`  base:     ${evm.address}${wallet.mnemonic ? '' : '  (generated -- a raw key derives no Base address)'}`);
       out(`  key file: ${file} (0600)`);
       if (existing) out(`  replaced: ${existing.address}`);
       out('');
@@ -310,7 +387,7 @@ function cmdWallet(args) {
     }
 
     default:
-      throw new UserError(`unknown wallet command: ${sub}\n  try: show | new | import | export | path`);
+      throw new UserError(`unknown wallet command: ${sub}\n  try: show | new | mnemonic | import | export | path`);
   }
 }
 
@@ -320,6 +397,69 @@ function safeLoadWallet() {
     return loadWallet();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Open the dashboard signed in as this install.
+ *
+ * The whole point of the split: the plugin holds keys, and everything a person
+ * might want to CHANGE -- which token they are paid in, what they have earned,
+ * which ads they were shown -- lives on the web where it can have a real
+ * interface. A terminal is a bad place to render an earnings history and a
+ * worse place to pick from a list of six currencies.
+ *
+ * A plugin-generated key has no wallet extension anywhere, so the dashboard's
+ * connect button cannot sign it in. This mints a single-use two-minute code
+ * from the token already on disk and opens the browser at it. The key does not
+ * move and is not exposed to the page.
+ */
+async function cmdDashboard(args) {
+  const stored = readStoredConfig();
+  const envToken = (process.env.PRMPT_TOKEN || process.env.PRMPT_API_KEY || '').trim();
+  const token = envToken || (typeof stored.token === 'string' ? stored.token.trim() : '');
+  if (!token) {
+    throw new UserError("this install has no token yet -- run 'prmpt login' first");
+  }
+
+  const endpoint = resolveEndpoint();
+  const session = await createWebSession({ endpoint, token });
+
+  out('prmpt: opening the dashboard.');
+  out('');
+  out(`  ${session.url}`);
+  out('');
+  out('That link signs in as this install. It is single use and expires in two');
+  out('minutes -- treat it like a password until you have opened it.');
+
+  if (args.includes('--no-open')) return;
+  if (!openInBrowser(session.url)) {
+    out('');
+    out('Could not open a browser here. Paste the link above into one.');
+  }
+}
+
+/**
+ * Best-effort browser launch.
+ *
+ * Detached and fully ignored, so the CLI exits immediately rather than blocking
+ * on a browser that may run in the foreground, and so a browser that writes to
+ * stderr does not scribble over our output. Returns whether the spawn itself
+ * worked -- not whether a page actually opened, which is unknowable from here.
+ */
+function openInBrowser(url) {
+  const [command, ...args] =
+    process.platform === 'darwin' ? ['open', url]
+    : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url]
+    : ['xdg-open', url];
+
+  try {
+    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -410,6 +550,8 @@ export async function run(argv) {
     case 'status':     return cmdStatus();
     case 'logout':     return cmdLogout();
     case 'wallet':     return cmdWallet(args);
+    case 'dashboard':
+    case 'web':        return cmdDashboard(args);
     case 'link':       return cmdLink(args);
     case 'update':     return cmdUpdate(args);
     case 'help':
