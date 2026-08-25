@@ -1,0 +1,135 @@
+name: Release
+
+# Tagging is the release trigger. Everything the installer and `prmpt update`
+# consume is built here, so this workflow is the only supported way to publish:
+# a hand-rolled release with a mismatched tarball name or a missing SHA256SUMS
+# is invisible to the updater at best, and refused at worst.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build a release for, e.g. v0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: resolve the tag and the version
+        id: v
+        run: |
+          set -eu
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          PKG=$(node -p 'require("./package.json").version')
+          # A tag that disagrees with package.json is the single most damaging
+          # mistake available here: `prmpt update` compares the version baked
+          # into package.json against the release tag, so a mismatch makes an
+          # install either re-update forever or never update again. Fail loudly.
+          if [ "$VERSION" != "$PKG" ]; then
+            echo "::error::tag $TAG implies version $VERSION but package.json says $PKG"
+            exit 1
+          fi
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # A release nobody tested is worse than no release, because it installs
+      # itself onto every machine within a day.
+      - run: node --test test/*.test.mjs
+      - run: sh -n install.sh
+
+      - name: build the tarball
+        run: |
+          set -eu
+          VERSION="${{ steps.v.outputs.version }}"
+          STAGE="$(mktemp -d)/prmpt"
+          mkdir -p "$STAGE"
+          # Explicit list, not a glob: the tarball is unpacked over somebody's
+          # install directory, so what goes in it is decided here and nowhere
+          # else. No .git, no tests, no workflows.
+          for item in bin hooks amp codex gemini install.sh install.ps1 package.json README.md LICENSE; do
+            [ -e "$item" ] && cp -R "$item" "$STAGE/" || true
+          done
+          [ -d .claude-plugin ] && cp -R .claude-plugin "$STAGE/" || true
+
+          # Refuse to ship an archive that could not possibly work.
+          for required in hooks/turn-end.mjs hooks/lib/config.mjs bin/prmpt.mjs package.json; do
+            test -f "$STAGE/$required" || { echo "::error::missing $required"; exit 1; }
+          done
+
+          # No wrapping directory: the updater accepts either, but a flat
+          # archive is what `tar xzf - -C <dir>` wants for an in-place install.
+          tar czf "prmpt-$VERSION.tar.gz" -C "$STAGE" .
+          sha256sum "prmpt-$VERSION.tar.gz" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: verify the tarball installs and runs
+        run: |
+          set -eux
+          VERSION="${{ steps.v.outputs.version }}"
+          DIR="$(mktemp -d)"
+          tar xzf "prmpt-$VERSION.tar.gz" -C "$DIR"
+          test "$(node "$DIR/bin/prmpt.mjs" version)" = "$VERSION"
+          # The hook must stay silent with no credentials and no network.
+          OUT=$(echo '{}' | PRMPT_NO_AUTO_UPDATE=1 PRMPT_NO_AUTO_ENROL=1 \
+            node "$DIR/hooks/turn-end.mjs" 2>&1)
+          test -z "$OUT"
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          TAG="${{ steps.v.outputs.tag }}"
+          VERSION="${{ steps.v.outputs.version }}"
+          # Re-runnable: workflow_dispatch on an existing tag replaces the
+          # assets rather than failing.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "prmpt-$VERSION.tar.gz" SHA256SUMS --clobber
+          else
+            gh release create "$TAG" "prmpt-$VERSION.tar.gz" SHA256SUMS \
+              --title "$TAG" --generate-notes
+          fi
+
+      # The one path CI cannot otherwise reach. The `installer` job in ci.yml
+      # runs install.sh from a checkout, so it takes the "use this checkout"
+      # branch and never downloads anything -- meaning the release fetch, the
+      # checksum verification and the unpack are only ever exercised here,
+      # against the release that was just published.
+      - name: install from the published release, for real
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          TAG="${{ steps.v.outputs.tag }}"
+          VERSION="${{ steps.v.outputs.version }}"
+          export HOME="$(mktemp -d)"
+          # A published release can take a moment to be visible to the API.
+          for _ in 1 2 3 4 5 6; do
+            gh release view "$TAG" --json assets >/dev/null 2>&1 && break
+            sleep 5
+          done
+          # Deliberately NOT from the checkout: copy install.sh somewhere with
+          # no hooks/ beside it, so it must go and fetch the release.
+          cp install.sh "$HOME/install.sh"
+          PRMPT_NO_AUTO_UPDATE=1 sh "$HOME/install.sh" \
+            --no-login --version "$TAG" --agents claude --dir "$HOME/app"
+          test "$(node "$HOME/app/bin/prmpt.mjs" version)" = "$VERSION"
+          grep -q 'turn-end.mjs' "$HOME/.claude/settings.json"
+          # Installing must not have created a wallet or contacted a backend.
+          test ! -e "$HOME/.config/prmpt/wallet.json"
+          test ! -e "$HOME/.config/prmpt/config.json"

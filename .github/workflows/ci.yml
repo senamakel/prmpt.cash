@@ -29,14 +29,35 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh -n install.sh
       - run: shellcheck -s sh install.sh || true
+
+      # install.ps1 cannot be run end to end on Linux, but it can be parsed --
+      # and pwsh is preinstalled on the GitHub runners. Catching a syntax error
+      # here beats shipping it to the one platform nobody tests on locally.
+      - name: parse install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          Write-Host 'install.ps1 parses clean'
       - name: install into a sandbox HOME, twice, then uninstall
         run: |
           set -eux
           export HOME="$(mktemp -d)"
-          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
-          ./install.sh --agents claude,codex,gemini --dir "$HOME/app"
+          # --no-login is NOT optional here. Without it the installer signs in
+          # against the DEFAULT endpoint, which is production: every CI run
+          # would create a real publisher account behind a wallet that dies
+          # with the runner. It did, until this was added.
+          export PRMPT_NO_AUTO_UPDATE=1
+          ./install.sh --no-login --agents claude,codex,gemini --dir "$HOME/app"
+          ./install.sh --no-login --agents claude,codex,gemini --dir "$HOME/app"
+          # Nothing may have been created under ~/.config/prmpt: no wallet, no
+          # token, no contact with any backend at all.
+          test ! -e "$HOME/.config/prmpt/wallet.json"
+          test ! -e "$HOME/.config/prmpt/config.json"
           # Running twice must not stack duplicate hook entries.
           n=$(grep -c 'turn-end.mjs' "$HOME/.claude/settings.json")
           test "$n" -eq 1
-          ./install.sh --uninstall --dir "$HOME/app"
+          ./install.sh --no-login --uninstall --dir "$HOME/app"
           ! grep -q 'turn-end.mjs' "$HOME/.claude/settings.json"

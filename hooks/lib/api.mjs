@@ -5,6 +5,8 @@
 // failure at all, because a failed ad request must be indistinguishable from
 // "no ad matched".
 
+import { currentVersion } from './version.mjs';
+
 const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
   serveAd(input: $input) {
     requestId
@@ -80,7 +82,7 @@ async function graphql({ endpoint, token, query, variables, timeoutMs = 1500 }) 
     const headers = {
       'content-type': 'application/json',
       accept: 'application/json',
-      'user-agent': 'prmpt-plugin/0.1.0',
+      'user-agent': `prmpt-plugin/${currentVersion()}`,
     };
     if (token) headers.authorization = `Bearer ${token}`;
 

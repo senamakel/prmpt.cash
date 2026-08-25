@@ -19,9 +19,14 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_URL="https://github.com/senamakel/prmpt.click.git"
-TARBALL_URL="https://codeload.github.com/senamakel/prmpt.click/tar.gz/refs/heads/main"
+REPO_SLUG="senamakel/prmpt.click"
+REPO_URL="https://github.com/$REPO_SLUG.git"
+# The fallback only. Normal installs come from a published release, so that what
+# lands here is a specific, checksummed version rather than whatever main was
+# at the moment you ran curl.
+TARBALL_URL="https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/main"
 DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
+VERSION=""
 
 CODE=""
 ENDPOINT=""
@@ -51,6 +56,7 @@ ${B}prmpt.click installer${R}
   --code <code>        Redeem a dashboard install code instead of creating a
                        wallet here. Use it when the key must stay off this box.
   --no-login           Install and wire up the agents, but create no wallet
+  --version <tag>      Install a specific release, e.g. v0.2.0 (default: latest)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
@@ -77,6 +83,8 @@ USAGE
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-login)  NO_LOGIN=1; shift ;;
+    --version)   VERSION="${2:-}"; shift 2 ;;
+    --version=*) VERSION="${1#*=}"; shift ;;
     --code)      CODE="${2:-}"; shift 2 ;;
     --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
@@ -166,25 +174,98 @@ if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/hooks/turn-end.mjs" ]; then
     ok "using $INSTALL_DIR"
   fi
 else
-  mkdir -p "$INSTALL_DIR"
-  if command -v git >/dev/null 2>&1; then
-    if [ -d "$INSTALL_DIR/.git" ]; then
-      (cd "$INSTALL_DIR" && git fetch -q origin main && git reset -q --hard origin/main)
-      ok "updated $INSTALL_DIR"
+  command -v curl >/dev/null 2>&1 || die "curl is required to download a release."
+  command -v tar  >/dev/null 2>&1 || die "tar is required to unpack a release."
+
+  # Ask the API which release to take. `releases/latest` excludes prereleases
+  # and drafts, so an rc is never picked up by an install that did not name it.
+  if [ -n "$VERSION" ]; then
+    API="https://api.github.com/repos/$REPO_SLUG/releases/tags/$VERSION"
+  else
+    API="https://api.github.com/repos/$REPO_SLUG/releases/latest"
+  fi
+
+  # Parsed with node, which is already a hard requirement above. Pulling a
+  # download URL out of JSON with grep and sed is how you end up installing
+  # whatever a crafted release name happens to contain.
+  meta=$("$NODE_BIN" -e '
+    const url = process.argv[1];
+    const headers = { "user-agent": "prmpt-install", accept: "application/vnd.github+json" };
+    if (process.env.GITHUB_TOKEN) headers.authorization = "Bearer " + process.env.GITHUB_TOKEN;
+    fetch(url, { headers }).then(async (r) => {
+      if (!r.ok) process.exit(3);
+      const j = await r.json();
+      const tag = j.tag_name || "";
+      const version = tag.replace(/^v/i, "");
+      const assets = Array.isArray(j.assets) ? j.assets : [];
+      const pick = (n) => assets.find((a) => a && a.name === n);
+      const tarball = pick(`prmpt-${version}.tar.gz`);
+      const sums = pick("SHA256SUMS");
+      if (!tarball || !sums) process.exit(4);
+      process.stdout.write([tag, tarball.name, tarball.browser_download_url, sums.browser_download_url].join("\n"));
+    }).catch(() => process.exit(3));
+  ' "$API" 2>/dev/null) || meta=""
+
+  if [ -n "$meta" ]; then
+    TAG=$(printf '%s\n' "$meta" | sed -n 1p)
+    ASSET=$(printf '%s\n' "$meta" | sed -n 2p)
+    ASSET_URL=$(printf '%s\n' "$meta" | sed -n 3p)
+    SUMS_URL=$(printf '%s\n' "$meta" | sed -n 4p)
+
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/$ASSET" "$ASSET_URL" || die "could not download $ASSET"
+    curl -fsSL -o "$tmp/SHA256SUMS" "$SUMS_URL" || die "could not download SHA256SUMS"
+
+    # Verify before unpacking, not after. An unverified archive must never be
+    # written over an install directory, even a fresh one.
+    expected=$(sed -n "s/^\([0-9a-f]\{64\}\) [ *]*$ASSET$/\1/p" "$tmp/SHA256SUMS" | head -n 1)
+    [ -n "$expected" ] || die "$ASSET is not listed in SHA256SUMS for $TAG"
+    if command -v sha256sum >/dev/null 2>&1; then
+      actual=$(sha256sum "$tmp/$ASSET" | cut -d" " -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+      actual=$(shasum -a 256 "$tmp/$ASSET" | cut -d" " -f1)
     else
+      actual=$("$NODE_BIN" -e '
+        const c=require("crypto"),f=require("fs");
+        process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"));
+      ' "$tmp/$ASSET")
+    fi
+    [ "$actual" = "$expected" ] || die "checksum mismatch for $ASSET
+  expected $expected
+  got      $actual"
+
+    unpack=$(mktemp -d)
+    tar xzf "$tmp/$ASSET" -C "$unpack"
+    # The release tarball is flat; a source tarball has one wrapping directory.
+    [ -f "$unpack/hooks/turn-end.mjs" ] || {
+      inner=$(find "$unpack" -maxdepth 2 -name turn-end.mjs -path '*/hooks/*' | head -n 1)
+      [ -n "$inner" ] || die "$ASSET does not contain a plugin"
+      unpack=$(dirname "$(dirname "$inner")")
+    }
+    rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
+    (cd "$unpack" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
+    rm -rf "$tmp" "$unpack"
+    ok "installed $TAG to $INSTALL_DIR ${D}(sha256 verified)${R}"
+  elif [ -n "$VERSION" ]; then
+    die "no release $VERSION with an installable tarball. See https://github.com/$REPO_SLUG/releases"
+  else
+    # No release yet, or the API is unreachable. Fall back to main so a first
+    # install still works before the first tag is cut -- and say so, because an
+    # unverified snapshot is not the same thing as a release.
+    warn "no published release found; falling back to main (not checksummed)"
+    mkdir -p "$INSTALL_DIR"
+    if command -v git >/dev/null 2>&1; then
       rm -rf "$INSTALL_DIR"
       git clone -q --depth 1 "$REPO_URL" "$INSTALL_DIR"
-      ok "cloned to $INSTALL_DIR"
+      ok "cloned main to $INSTALL_DIR"
+    else
+      tmp=$(mktemp -d)
+      curl -fsSL "$TARBALL_URL" | tar xz -C "$tmp" --strip-components=1
+      rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
+      (cd "$tmp" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
+      rm -rf "$tmp"
+      ok "downloaded main to $INSTALL_DIR"
     fi
-  elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
-    tmp=$(mktemp -d)
-    curl -fsSL "$TARBALL_URL" | tar xz -C "$tmp" --strip-components=1
-    rm -rf "$INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
-    (cd "$tmp" && tar cf - .) | (cd "$INSTALL_DIR" && tar xf -)
-    rm -rf "$tmp"
-    ok "downloaded to $INSTALL_DIR"
-  else
-    die "need git, or curl and tar, to fetch the plugin."
   fi
 fi
 

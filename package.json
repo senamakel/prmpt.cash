@@ -1,6 +1,6 @@
 {
   "name": "prmpt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "End-of-turn sponsored-line hook for coding agents. Get paid in USDC when someone clicks.",
   "license": "MIT",
   "type": "module",
