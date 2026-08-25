@@ -1,16 +1,43 @@
 {
   "name": "prmpt",
   "version": "0.1.0",
-  "description": "End-of-turn sponsored-line hook for coding agents. Get paid in USDC when someone clicks.",
+  "description": "End-of-turn sponsored-line hook for coding agents. Get paid 70% of the click price on Solana, in USDC, SOL, cbBTC, TINY or XAUt0.",
   "license": "MIT",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/senamakel/prmpt.click.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/senamakel/prmpt.click.git"
+  },
   "homepage": "https://prmpt.click",
-  "bugs": { "url": "https://github.com/senamakel/prmpt.click/issues" },
-  "keywords": ["ads", "sponsorship", "monetization", "solana", "usdc", "claude-code", "codex", "gemini-cli", "amp"],
-  "engines": { "node": ">=18" },
-  "bin": { "prmpt": "bin/prmpt.mjs" },
-  "files": ["bin", "hooks", "amp", "install.sh", "install.ps1", "README.md", "LICENSE"],
+  "bugs": {
+    "url": "https://github.com/senamakel/prmpt.click/issues"
+  },
+  "keywords": [
+    "ads",
+    "sponsorship",
+    "monetization",
+    "solana",
+    "usdc",
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "amp"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "prmpt": "bin/prmpt.mjs"
+  },
+  "files": [
+    "bin",
+    "hooks",
+    "amp",
+    "install.sh",
+    "install.ps1",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node --test test/*.test.mjs"
   }

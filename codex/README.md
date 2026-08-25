@@ -59,7 +59,7 @@ node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
 ```
 
 Writes `~/.config/prmpt/config.json` at mode 0600. See the [main README](../README.md) for the
-70/30 revenue share, USDC settlement, and exactly what data is sent.
+70/30 revenue share, which tokens a payout can settle in, and exactly what data is sent.
 
 ## Environment
 
