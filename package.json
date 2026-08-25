@@ -6,11 +6,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/senamakel/prmpt.click.git"
+    "url": "git+https://github.com/senamakel/prmpt.cash.git"
   },
   "homepage": "https://prmpt.click",
   "bugs": {
-    "url": "https://github.com/senamakel/prmpt.click/issues"
+    "url": "https://github.com/senamakel/prmpt.cash/issues"
   },
   "keywords": [
     "ads",

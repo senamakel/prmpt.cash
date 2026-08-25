@@ -6,7 +6,7 @@
     "name": "prmpt.click",
     "url": "https://prmpt.click"
   },
-  "homepage": "https://github.com/senamakel/prmpt.click",
+  "homepage": "https://github.com/senamakel/prmpt.cash",
   "license": "MIT",
   "keywords": [
     "ads",
@@ -17,5 +17,5 @@
     "passive-income"
   ],
   "hooks": "./hooks/hooks.json",
-  "repository": "https://github.com/senamakel/prmpt.click"
+  "repository": "https://github.com/senamakel/prmpt.cash"
 }

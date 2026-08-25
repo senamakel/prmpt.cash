@@ -19,8 +19,8 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_URL="https://github.com/senamakel/prmpt.click.git"
-TARBALL_URL="https://codeload.github.com/senamakel/prmpt.click/tar.gz/refs/heads/main"
+REPO_URL="https://github.com/senamakel/prmpt.cash.git"
+TARBALL_URL="https://codeload.github.com/senamakel/prmpt.cash/tar.gz/refs/heads/main"
 DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
 
 CODE=""

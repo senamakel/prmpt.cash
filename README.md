@@ -66,14 +66,14 @@ curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
 **In Claude Code** you can install it as a plugin instead:
 
 ```
-/plugin marketplace add senamakel/prmpt.click
+/plugin marketplace add senamakel/prmpt.cash
 /plugin install prmpt@prmpt
 ```
 
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
 
 ```sh
-git clone https://github.com/senamakel/prmpt.click
+git clone https://github.com/senamakel/prmpt.cash
 ./prmpt.click/install.sh
 ```
 

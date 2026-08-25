@@ -50,8 +50,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RepoUrl         = 'https://github.com/senamakel/prmpt.click.git'
-$ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.click/zip/refs/heads/main'
+$RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'
+$ZipUrl          = 'https://codeload.github.com/senamakel/prmpt.cash/zip/refs/heads/main'
 $DefaultEndpoint = 'https://api.prmpt.click/graphql'
 
 if (-not $Endpoint) { $Endpoint = $DefaultEndpoint }
