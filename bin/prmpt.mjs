@@ -30,6 +30,9 @@ import {
   walletFromSecret,
 } from '../hooks/lib/wallet.mjs';
 import { loginWithWallet } from '../hooks/lib/login.mjs';
+import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
+import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
+import { RELEASE_REPO } from '../hooks/lib/release.mjs';
 import { exchangeInstallCode } from '../hooks/lib/api.mjs';
 import { normalizeCode, validateCode } from '../hooks/lib/install-code.mjs';
 
@@ -77,6 +80,12 @@ usage: prmpt <command> [options]
   wallet export [--json]     Print the secret key. Only ever do this to back it up.
   wallet path                Where the key file lives.
 
+  update [--check]           Update this install to the latest GitHub release.
+                             --check reports without changing anything;
+                             --version <tag> pins to a specific release, which
+                             may be a downgrade; --dry-run says what it would do.
+  version                    What is installed here.
+
   link <code>                The dashboard route: prove the wallet in a browser
                              and redeem the one-off code it mints. Use this when
                              the key must never be on this machine.
@@ -84,9 +93,16 @@ usage: prmpt <command> [options]
   help                       This text.
 
 Environment:
-  PRMPT_ENDPOINT   API endpoint (default ${DEFAULT_ENDPOINT})
-  PRMPT_TOKEN      Overrides the stored token entirely
-  PRMPT_DISABLED   Set to 1 to stop the hook serving anything
+  PRMPT_ENDPOINT        API endpoint (default ${DEFAULT_ENDPOINT})
+  PRMPT_TOKEN           Overrides the stored token entirely
+  PRMPT_DISABLED        Set to 1 to stop the hook serving anything
+  PRMPT_NO_AUTO_UPDATE  Set to 1 to stop this install updating itself
+  PRMPT_NO_AUTO_ENROL   Set to 1 to stop it creating a wallet on its own
+
+This install updates itself: once a day the hook detaches a child that checks
+${RELEASE_REPO} for a newer release and, if there is one, verifies its
+checksum and swaps this directory for it. Your token and wallet key live in
+~/.config/prmpt and are never touched by that.
 
 The wallet is a hot wallet: a cleartext key at mode 0600 under your home
 directory. It holds ad revenue, not savings. Back it up, and prefer
@@ -333,6 +349,57 @@ async function cmdLink(args) {
   out(`  config:     ${file} (0600)`);
 }
 
+async function cmdUpdate(args) {
+  const quiet = args.includes('--quiet');
+  const dryRun = args.includes('--dry-run');
+  const check = args.includes('--check');
+  const tagIndex = args.indexOf('--version');
+  const tag = tagIndex !== -1 ? args[tagIndex + 1] : undefined;
+  if (tagIndex !== -1 && !tag) throw new UserError('--version needs a release tag, e.g. v0.2.0');
+
+  // --quiet is for the background child: it must be silent about routine
+  // outcomes but must still fail loudly enough to show up in an exit code.
+  const say = quiet ? () => {} : out;
+
+  const root = pluginRoot();
+  const blocker = updateBlocker(root);
+  if (blocker && !check) {
+    if (quiet) process.exit(0);
+    throw new UserError(`refusing to update -- ${blocker}\n  installed at ${root}`);
+  }
+
+  const plan = await planUpdate({ root, tag });
+
+  if (check || dryRun) {
+    out(`installed: ${plan.current}`);
+    if (!plan.release) {
+      out(`latest:    unknown (${plan.reason})`);
+      return;
+    }
+    out(`latest:    ${plan.release.version}  (${plan.release.tag})`);
+    out(plan.action === 'none'
+      ? `nothing to do: ${plan.reason}`
+      : `would ${plan.action === 'pin' ? 'pin to' : 'update to'} ${plan.release.version}`);
+    if (blocker) out(`but: ${blocker}`);
+    if (plan.release.notesUrl) out(`notes:     ${plan.release.notesUrl}`);
+    return;
+  }
+
+  if (plan.action === 'none') {
+    say(`prmpt: ${plan.reason} (${plan.current})`);
+    return;
+  }
+
+  const result = await applyUpdate({ root, tag, plan });
+  if (!result.updated) {
+    say(`prmpt: ${result.reason}`);
+    return;
+  }
+  say(`prmpt: updated ${result.from} -> ${result.to}`);
+  if (result.notesUrl) say(`  notes: ${result.notesUrl}`);
+  say('  Restart your agent to pick it up.');
+}
+
 // --- dispatch ---------------------------------------------------------------
 
 export async function run(argv) {
@@ -344,23 +411,15 @@ export async function run(argv) {
     case 'logout':     return cmdLogout();
     case 'wallet':     return cmdWallet(args);
     case 'link':       return cmdLink(args);
+    case 'update':     return cmdUpdate(args);
     case 'help':
     case '-h':
     case '--help':     out(HELP); return;
     case 'version':
     case '-v':
-    case '--version':  out(await version()); return;
+    case '--version':  out(currentVersion()); return;
     default:
       throw new UserError(`unknown command: ${command}\n  try 'prmpt help'`);
-  }
-}
-
-async function version() {
-  const url = new URL('../package.json', import.meta.url);
-  try {
-    return JSON.parse(fs.readFileSync(url, 'utf8')).version ?? '0.0.0';
-  } catch {
-    return '0.0.0';
   }
 }
 

@@ -17,6 +17,7 @@ import process from 'node:process';
 import { loadConfig, detectRepo } from './lib/config.mjs';
 import { serveAd } from './lib/api.mjs';
 import { enrolInBackground } from './lib/enrol.mjs';
+import { autoUpdateInBackground } from './lib/autoupdate.mjs';
 
 /** Below this many characters a turn carries no usable signal. */
 const MIN_TURN_CHARS = 80;
@@ -236,6 +237,12 @@ function main() {
 
     // An explicit opt-out ends it here, before anything is created on disk.
     if (config.disabled) return quiet();
+
+    // Keep this install current. Detached and at most daily, so the cost to
+    // this turn is a stat() and a spawn -- never a download. Deliberately
+    // before the token check: an install that has drifted far enough behind to
+    // be broken still needs to be able to fix itself.
+    autoUpdateInBackground();
 
     // No token. Rather than staying mute forever waiting for someone to visit
     // the dashboard, hand off to a detached child that creates a wallet and

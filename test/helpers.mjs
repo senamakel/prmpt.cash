@@ -62,6 +62,12 @@ export function baseEnv(extra = {}) {
     XDG_CONFIG_HOME: path.join(home, '.config'),
     // Keep colour codes out of the assertions on the text branch.
     NO_COLOR: '1',
+    // Opt out of self-update by default. The plugin directory under test is a
+    // git checkout, which update.mjs refuses on its own -- but relying on that
+    // would mean the whole suite starts calling the GitHub API the moment
+    // somebody runs it from an unpacked release. The auto-update tests set
+    // this back to '0' explicitly, against a fake install dir.
+    PRMPT_NO_AUTO_UPDATE: '1',
   };
   for (const [k, v] of Object.entries(extra)) {
     if (v === undefined) delete env[k];
