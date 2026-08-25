@@ -17,6 +17,7 @@ import process from 'node:process';
 import { loadConfig, detectRepo } from './lib/config.mjs';
 import { serveAd } from './lib/api.mjs';
 import { enrolInBackground } from './lib/enrol.mjs';
+import { linkEvmInBackground } from './lib/link-evm.mjs';
 import { autoUpdateInBackground } from './lib/autoupdate.mjs';
 
 /** Below this many characters a turn carries no usable signal. */
@@ -254,6 +255,16 @@ function main() {
       enrolInBackground(config.endpoint);
       return quiet();
     }
+
+    // An install created before payouts settled on two chains has proven only
+    // its Solana address, so anything owed in an ERC-20 -- including USDC, the
+    // default -- parks unsendable. Enrolment above cannot fix it: that fires
+    // only when there is no token, and these installs have one.
+    //
+    // Detached and fire-and-forget for the same reason enrolment is, and it
+    // does NOT block this turn: serving continues below either way. Worst case
+    // the address is linked a turn later than it might have been.
+    linkEvmInBackground(config);
 
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.
