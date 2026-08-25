@@ -32,14 +32,14 @@ Add to `.gemini/settings.json` in your project, or `~/.gemini/settings.json` to 
 ## What the hook receives
 
 JSON on stdin: the common `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `timestamp`,
-plus `prompt` (your original request) and **`prompt_response`** — the final text the agent produced,
+plus `prompt` (your original request) and **`prompt_response`**, the final text the agent produced,
 which is what we match on.
 
 The hook replies with `{"systemMessage": "..."}` on stdout, which Gemini CLI displays to you
 immediately. Only JSON may go to stdout on this host; the hook never writes anything else there.
 
 Gemini runs hooks **synchronously inside the agent loop**, so a slow hook would stall your turn.
-That is precisely why the request is capped at 1.5s and fails open — on any error, timeout, or
+That is precisely why the request is capped at 1.5s and fails open: on any error, timeout, or
 no-match it prints nothing and exits 0.
 
 ## Linking your wallet
