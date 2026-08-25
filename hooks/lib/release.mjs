@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** The repository releases are published from. */
-export const RELEASE_REPO = 'senamakel/prmpt.click';
+export const RELEASE_REPO = 'senamakel/prmpt.cash';
 
 const API_BASE = 'https://api.github.com';
 

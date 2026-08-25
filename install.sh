@@ -1,7 +1,7 @@
 #!/bin/sh
-# prmpt.click -- one installer for every supported coding agent.
+# prmpt.cash -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+#   curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 #
 # Or, from a checkout:  ./install.sh --code <install-code>
 #
@@ -19,13 +19,13 @@
 # POSIX sh on purpose -- this gets piped into whatever /bin/sh the machine has.
 set -eu
 
-REPO_SLUG="senamakel/prmpt.click"
+REPO_SLUG="senamakel/prmpt.cash"
 REPO_URL="https://github.com/$REPO_SLUG.git"
 # The fallback only. Normal installs come from a published release, so that what
 # lands here is a specific, checksummed version rather than whatever main was
 # at the moment you ran curl.
 TARBALL_URL="https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/main"
-DEFAULT_ENDPOINT="https://api.prmpt.click/graphql"
+DEFAULT_ENDPOINT="https://api.prmpt.cash/graphql"
 VERSION=""
 
 CODE=""
@@ -51,7 +51,7 @@ die()  { printf '%serror:%s %s\n' "$E" "$R" "$*" >&2; exit 1; }
 
 usage() {
   cat <<USAGE
-${B}prmpt.click installer${R}
+${B}prmpt.cash installer${R}
 
   --code <code>        Redeem a dashboard install code instead of creating a
                        wallet here. Use it when the key must stay off this box.
@@ -125,7 +125,7 @@ NODE_BIN=$(command -v node)
 
 # ------------------------------------------------------------------- uninstall
 if [ "$UNINSTALL" -eq 1 ]; then
-  say "${B}Removing prmpt.click${R}"
+  say "${B}Removing prmpt.cash${R}"
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
@@ -167,7 +167,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 # ------------------------------------------------------------------ get source
-say "${B}prmpt.click${R}"
+say "${B}prmpt.cash${R}"
 say ""
 
 # Running from a checkout? Use it. Otherwise fetch.
@@ -445,5 +445,5 @@ if [ -f "$INSTALL_DIR/install.sh" ]; then
   say "  ${D}Remove it:${R}    $INSTALL_DIR/install.sh --uninstall"
 else
   # $0 is "sh" when this was piped from curl, so it is not a runnable path.
-  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.click/install.sh | sh -s -- --uninstall"
+  say "  ${D}Remove it:${R}    curl -fsSL https://prmpt.cash/install.sh | sh -s -- --uninstall"
 fi
