@@ -155,12 +155,8 @@ export function saveEvmWallet(wallet) {
  * in a file the user has to back up separately.
  */
 export function ensureEvmWallet(solanaWallet) {
-  if (solanaWallet?.mnemonic) {
-    return { wallet: evmWalletFromMnemonic(solanaWallet.mnemonic), created: false, stored: false };
-  }
-
-  const existing = loadStoredEvmWallet();
-  if (existing) return { wallet: existing, created: false, stored: true };
+  const found = peekEvmWallet(solanaWallet);
+  if (found) return found;
 
   // 32 random bytes are a valid key with overwhelming probability; the loop
   // covers the vanishing case of a draw at or above the group order, which
@@ -174,4 +170,23 @@ export function ensureEvmWallet(solanaWallet) {
   }
   saveEvmWallet(wallet);
   return { wallet, created: true, stored: true };
+}
+
+/**
+ * The Base wallet, WITHOUT creating one. Null when this install has none yet.
+ *
+ * Display commands use this rather than `ensureEvmWallet`, so that looking at
+ * your wallet does not silently mint a key file. That distinction only matters
+ * for raw-key installs -- a phrase-backed one derives its Base key and writes
+ * nothing either way -- but "reading is read-only" is worth keeping true, and a
+ * key that appears because somebody ran a print command is a key nobody knows
+ * they need to back up.
+ */
+export function peekEvmWallet(solanaWallet) {
+  if (solanaWallet?.mnemonic) {
+    return { wallet: evmWalletFromMnemonic(solanaWallet.mnemonic), created: false, stored: false };
+  }
+  const existing = loadStoredEvmWallet();
+  if (existing) return { wallet: existing, created: false, stored: true };
+  return null;
 }

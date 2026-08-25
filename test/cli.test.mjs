@@ -131,6 +131,35 @@ test('a seed phrase imports both chains and derives the same addresses', async (
   fs.rmSync(target, { recursive: true, force: true });
 });
 
+test('a raw-key install gets a separate Base key, and only when it needs one', async () => {
+  const home = tempHome();
+  await prmpt(['wallet', 'new'], home);
+
+  // Strip the phrase, leaving the shape every install created before seed
+  // phrases existed: a bare ed25519 key with nothing to derive a Base key from.
+  const walletFile = path.join(home, 'prmpt', 'wallet.json');
+  const stored = JSON.parse(fs.readFileSync(walletFile, 'utf8'));
+  delete stored.mnemonic;
+  delete stored.derivationPath;
+  fs.writeFileSync(walletFile, JSON.stringify(stored));
+
+  const evmFile = path.join(home, 'prmpt', 'evm.json');
+
+  // Printing an address must not mint one. A key that appears because somebody
+  // ran a display command is a key nobody knows they have to back up.
+  const shown = await prmpt(['wallet'], home);
+  assert.equal(shown.code, 0);
+  assert.match(shown.stdout, /base\s+not created yet/);
+  assert.equal(fs.existsSync(evmFile), false);
+
+  // And there is no phrase to print, which must be said rather than guessed at.
+  const phrase = await prmpt(['wallet', 'mnemonic'], home);
+  assert.equal(phrase.code, 1);
+  assert.match(phrase.stderr, /no seed phrase/);
+
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 test('export round-trips through import, in both formats', async () => {
   const source = tempHome();
   await prmpt(['wallet', 'new'], source);

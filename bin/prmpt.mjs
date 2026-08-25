@@ -31,7 +31,7 @@ import {
   walletFromSecret,
   walletFromMnemonic,
 } from '../hooks/lib/wallet.mjs';
-import { ensureEvmWallet, evmWalletPath } from '../hooks/lib/evm.mjs';
+import { ensureEvmWallet, peekEvmWallet, evmWalletPath } from '../hooks/lib/evm.mjs';
 import { loginWithWallet } from '../hooks/lib/login.mjs';
 import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
@@ -273,9 +273,11 @@ function cmdWallet(args) {
     case 'address': {
       const wallet = loadWallet();
       if (!wallet) throw new UserError("no wallet yet -- run 'prmpt login' or 'prmpt wallet new'");
-      const { wallet: evm, stored } = ensureEvmWallet(wallet);
+      // peek, not ensure: printing an address must not create one.
+      const found = peekEvmWallet(wallet);
       out(`solana  ${wallet.address}`);
-      out(`base    ${evm.address}`);
+      out(`base    ${found ? found.wallet.address : "not created yet -- run 'prmpt login'"}`);
+      const stored = found?.stored ?? false;
       if (!wallet.mnemonic) {
         // A raw-key install has two unrelated secrets, and the Base one was
         // generated here rather than derived. Saying so is the difference
