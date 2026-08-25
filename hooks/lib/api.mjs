@@ -54,6 +54,44 @@ const SIWS_CHALLENGE = `mutation SiwsChallenge($wallet: String!) {
   }
 }`;
 
+// Sign-In With Ethereum, for the Base half of the wallet.
+//
+// This is a LINK, not a login: the publisher is already authenticated by the
+// SIWS pair above, and this attaches the second address they hold. Which is why
+// linkEvmWallet needs the token and evmChallenge does not.
+const EVM_CHALLENGE = `mutation EvmChallenge($address: String!) {
+  evmChallenge(address: $address) {
+    address
+    nonce
+    message
+    expiresAt
+  }
+}`;
+
+const LINK_EVM_WALLET = `mutation LinkEvmWallet($address: String!, $nonce: String!, $signature: String!) {
+  linkEvmWallet(address: $address, nonce: $nonce, signature: $signature) {
+    installId
+    solanaWallet
+    evmWallet
+    payoutToken
+    payoutChain
+  }
+}`;
+
+// The dashboard route out of the terminal: mint a one-off code and open it.
+//
+// The exact inverse of exchangeInstallCode -- there, a browser proved a wallet
+// and handed a code to the plugin; here the plugin proves one and hands a code
+// to the browser. It exists because a key this plugin generated has no wallet
+// extension anywhere, so the dashboard's connect button can do nothing for it.
+const CREATE_WEB_SESSION = `mutation CreateWebSession {
+  createWebSession {
+    code
+    url
+    expiresAt
+  }
+}`;
+
 const SIWS_VERIFY = `mutation SiwsVerify($wallet: String!, $nonce: String!, $signature: String!) {
   siwsVerify(wallet: $wallet, nonce: $nonce, signature: $signature) {
     token
@@ -61,6 +99,9 @@ const SIWS_VERIFY = `mutation SiwsVerify($wallet: String!, $nonce: String!, $sig
     publisher {
       installId
       solanaWallet
+      evmWallet
+      payoutToken
+      payoutChain
     }
   }
 }`;
@@ -195,6 +236,74 @@ export async function exchangeInstallCode({ endpoint, code, timeoutMs = 15000 })
 }
 
 /**
+ * Ask for a one-time SIWE challenge over an EVM address.
+ *
+ * Anonymous, like its Solana counterpart: minting a challenge proves nothing.
+ */
+export async function evmChallenge({ endpoint, address, timeoutMs = 15000 }) {
+  const data = await graphql({
+    endpoint,
+    query: EVM_CHALLENGE,
+    variables: { address },
+    timeoutMs,
+  });
+
+  const node = data?.evmChallenge;
+  if (!node || typeof node.message !== 'string' || typeof node.nonce !== 'string') {
+    throw new Error('prmpt: evmChallenge returned no challenge');
+  }
+  return {
+    address: typeof node.address === 'string' ? node.address : address,
+    nonce: node.nonce,
+    message: node.message,
+    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
+  };
+}
+
+/**
+ * Attach the proven Base address to this install's publisher account.
+ *
+ * Needs the publisher token: the backend takes the account from the token and
+ * never from the address, so this can only ever link to us.
+ */
+export async function linkEvmWallet({ endpoint, token, address, nonce, signature, timeoutMs = 15000 }) {
+  const data = await graphql({
+    endpoint,
+    token,
+    query: LINK_EVM_WALLET,
+    variables: { address, nonce, signature },
+    timeoutMs,
+  });
+
+  const node = data?.linkEvmWallet;
+  if (!node || typeof node !== 'object') {
+    throw new Error('prmpt: linkEvmWallet returned no publisher');
+  }
+  return {
+    installId: node.installId ?? null,
+    solanaWallet: node.solanaWallet ?? null,
+    evmWallet: node.evmWallet ?? null,
+    payoutToken: node.payoutToken ?? null,
+    payoutChain: node.payoutChain ?? null,
+  };
+}
+
+/** Mint a one-off code that opens the dashboard as this install's publisher. */
+export async function createWebSession({ endpoint, token, timeoutMs = 15000 }) {
+  const data = await graphql({ endpoint, token, query: CREATE_WEB_SESSION, timeoutMs });
+
+  const node = data?.createWebSession;
+  if (!node || typeof node.url !== 'string' || !node.url) {
+    throw new Error('prmpt: createWebSession returned no url');
+  }
+  return {
+    code: typeof node.code === 'string' ? node.code : null,
+    url: node.url,
+    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
+  };
+}
+
+/**
  * Ask for a one-time SIWS challenge to sign.
  *
  * Throws like exchangeInstallCode does: every caller is a person running a
@@ -244,5 +353,8 @@ export async function siwsVerify({ endpoint, wallet, nonce, signature, timeoutMs
     expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
     installId: node.publisher?.installId ?? null,
     solanaWallet: node.publisher?.solanaWallet ?? null,
+    evmWallet: node.publisher?.evmWallet ?? null,
+    payoutToken: node.publisher?.payoutToken ?? null,
+    payoutChain: node.publisher?.payoutChain ?? null,
   };
 }

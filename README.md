@@ -5,7 +5,8 @@
 When your agent finishes a reply, this hook asks whether any advertiser genuinely
 matches what you just did. Almost always the answer is no and nothing prints. On a
 match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
-price lands in your Solana wallet as USDC**, usually within a second.
+price lands in your wallet**, usually within a second — in USDC, cbBTC or ETH on
+Base, or SOL, TINY or XAUt0 on Solana, whichever you pick.
 
 It creates the wallet itself, so installing is one command with nothing to sign
 up for. Zero runtime dependencies. Plain ESM. Node 18+. Works with Claude Code,
@@ -79,21 +80,37 @@ than appending, so you cannot end up with duplicates.
 
 ## The wallet
 
-The plugin holds its own Solana keypair and signs in with it. That is what makes
-first run self-service: Sign-In With Solana asks the server for a one-time
-challenge, signs the exact message it minted, and gets back a publisher JWT.
+**One seed phrase, two chains.** The plugin generates a BIP-39 mnemonic and
+derives both addresses from it — Solana at `m/44'/501'/0'/0'` and Base at
+`m/44'/60'/0'/0/0`, the same paths Phantom and MetaMask use. Twelve words are
+one thing to write down, and they import into either wallet unchanged.
+
+It signs in with those keys itself, which is what makes first run self-service:
+Sign-In With Solana asks the server for a one-time challenge, signs the exact
+message it minted, and gets back a publisher JWT. The Base address is then
+proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
+
+Which address gets paid follows from the token you choose: ERC-20s settle on
+Base, and SOL, TINY and XAUt0 on Solana. You choose on the dashboard.
 
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
+prmpt dashboard                 # open the web dashboard, signed in as this install
 prmpt status                    # wallet, token, expiry, endpoint — nothing secret
-prmpt wallet                    # print the address
-prmpt wallet new [--force]      # generate a fresh key
-prmpt wallet import <secret>    # adopt a key you already have (- reads stdin)
-prmpt wallet export [--json]    # print the secret key, to back it up
+prmpt wallet                    # print both addresses
+prmpt wallet mnemonic           # print the seed phrase — this is the backup
+prmpt wallet new [--force]      # generate a fresh phrase and both keys
+prmpt wallet import <secret>    # adopt a phrase, or a Solana key (- reads stdin)
+prmpt wallet export [--json]    # print the Solana secret key
 prmpt link <install-code>       # the dashboard route
-prmpt logout                    # forget the token; the key is left alone
+prmpt logout                    # forget the token; the keys are left alone
 ```
+
+**The plugin holds keys; the web holds settings.** `prmpt dashboard` mints a
+single-use two-minute code from the token already on disk and opens it in your
+browser — no wallet extension needed, and the key never leaves the machine.
+Everything worth configuring, and every number worth reading, lives there.
 
 The hook also enrols itself: an install with no token detaches a `prmpt login`
 child on the first turn and serves normally from the next one. It is never on
@@ -106,19 +123,23 @@ the turn's own clock — two round trips against a cold backend is many times th
 
 ```
 ~/.config/prmpt/wallet.json          mode 0600, the only copy
-{ "address": …, "secretKey": …, "imported": false, "createdAt": … }
+{ "address": …, "mnemonic": …, "secretKey": …, "imported": false, "createdAt": … }
 ```
 
 Anyone who can read that file can sign as you and move anything the address
 holds. It is sized for ad revenue, not savings. Three consequences worth acting
 on:
 
-- **Back it up.** `prmpt wallet export` prints a base58 key that Phantom,
-  Solflare and Backpack all import; `--json` prints the `solana-keygen` array
-  form. Lose the file without a backup and the earnings paid to that address are
-  gone with it. Neither `--uninstall` deletes it, on purpose.
-- **Or bring your own.** `prmpt wallet import` takes any of those formats, so
-  payouts can land in a wallet you already control and already back up.
+- **Back it up.** `prmpt wallet mnemonic` prints the twelve words, which restore
+  both chains in Phantom, Solflare, Backpack or MetaMask. (`prmpt wallet export`
+  still prints the Solana key alone, in base58 or `solana-keygen` array form.)
+  Lose the file without a backup and the earnings paid to those addresses are
+  gone with it. No `--uninstall` deletes it, on purpose.
+- **Or bring your own.** `prmpt wallet import` takes a seed phrase — which
+  brings both chains — or a bare Solana key, so payouts can land in a wallet you
+  already control and already back up. An imported raw key has no phrase behind
+  it, so a separate Base key is generated and stored in `evm.json`; back that up
+  too, or import a phrase instead and avoid the second file entirely.
 - **Or keep the key off the box entirely.** `prmpt link <code>` still works. The
   dashboard is the only place a real wallet prompt can open, and an install
   linked that way never has a local key at all.

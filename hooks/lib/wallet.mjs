@@ -16,6 +16,18 @@
 // instead -- and someone who wants the key to never touch this machine should
 // keep using the dashboard install-code flow, which still works unchanged.
 //
+// Since the engine pays on two chains, the key material starts one level
+// further back: a wallet created here is a BIP-39 seed phrase, and the Solana
+// key below is derived from it at the standard m/44'/501'/0'/0'. The Base key
+// comes off the same phrase in evm.mjs. One phrase is one thing to back up,
+// and it imports cleanly into Phantom, Solflare or MetaMask, so the generated
+// wallet is a real wallet rather than a hostage.
+//
+// Raw-key wallets are still first class: `prmpt wallet import` of a bare
+// secret, and every install created before phrases existed, load and sign
+// exactly as they did. A raw key cannot derive anything, so those installs get
+// a separately generated Base key -- see evm.mjs.
+//
 // Zero dependencies: ed25519 is native in node:crypto (Node 18+), and base58
 // lives next door.
 
@@ -25,6 +37,8 @@ import path from 'node:path';
 
 import { configDir } from './config.mjs';
 import { encodeBase58, decodeBase58 } from './base58.mjs';
+import { generateMnemonic, mnemonicToSeed, normalizeMnemonic, validateMnemonic } from './bip39.mjs';
+import { deriveEd25519Seed, SOLANA_PATH } from './slip10.mjs';
 
 /** PKCS#8 PrivateKeyInfo header for an ed25519 key, followed by the 32 byte seed. */
 const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
@@ -100,7 +114,43 @@ function walletFromSeed(seed) {
   };
 }
 
-/** Generate a brand new wallet from the OS CSPRNG. */
+/**
+ * The Solana wallet held by a seed phrase.
+ *
+ * The returned wallet carries `mnemonic` so callers can persist the phrase
+ * rather than the derived key -- the phrase is the thing worth keeping, and
+ * storing the derived key alongside it would create two sources of truth that
+ * can disagree.
+ */
+export function walletFromMnemonic(mnemonic, { path = SOLANA_PATH } = {}) {
+  const phrase = normalizeMnemonic(mnemonic);
+  if (!validateMnemonic(phrase)) {
+    // Re-derive the specific complaint rather than saying "invalid": the
+    // caller has usually just typed twelve words by hand.
+    throw new Error(
+      'prmpt: that is not a valid BIP-39 seed phrase. ' +
+      'Check the word count and spelling against your backup.',
+    );
+  }
+  const wallet = walletFromSeed(deriveEd25519Seed(mnemonicToSeed(phrase), path));
+  wallet.mnemonic = phrase;
+  wallet.derivationPath = path;
+  return wallet;
+}
+
+/** Generate a brand new seed-phrase wallet. This is what a fresh install gets. */
+export function generateMnemonicWallet() {
+  return walletFromMnemonic(generateMnemonic());
+}
+
+/**
+ * Generate a bare keypair with no phrase behind it.
+ *
+ * Kept for callers that explicitly want a one-off key, and for the tests. New
+ * installs go through `generateMnemonicWallet` instead: a key with no phrase
+ * can only be backed up as an opaque base58 blob, and cannot derive the Base
+ * side of the wallet.
+ */
 export function generateWallet() {
   return walletFromSeed(crypto.randomBytes(32));
 }
@@ -178,11 +228,24 @@ export function loadWallet() {
       'move it aside rather than deleting it, then create or import a wallet.',
     );
   }
-  if (!parsed || typeof parsed.secretKey !== 'string' || !parsed.secretKey) {
-    throw new Error(`prmpt: ${walletPath()} has no secretKey`);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error(`prmpt: ${walletPath()} is not a wallet file`);
   }
 
-  const wallet = walletFromSecret(parsed.secretKey);
+  // A phrase, when there is one, is authoritative over any key stored beside
+  // it: the derived key is a cache of the phrase and not the other way round.
+  let wallet;
+  if (typeof parsed.mnemonic === 'string' && parsed.mnemonic.trim()) {
+    wallet = walletFromMnemonic(parsed.mnemonic, {
+      path: typeof parsed.derivationPath === 'string' && parsed.derivationPath
+        ? parsed.derivationPath
+        : SOLANA_PATH,
+    });
+  } else if (typeof parsed.secretKey === 'string' && parsed.secretKey) {
+    wallet = walletFromSecret(parsed.secretKey);
+  } else {
+    throw new Error(`prmpt: ${walletPath()} has neither a mnemonic nor a secretKey`);
+  }
   // A stored address that disagrees with the key means the file was edited by
   // hand. Trust the key -- it is the thing that can actually sign -- but say so.
   if (typeof parsed.address === 'string' && parsed.address && parsed.address !== wallet.address) {
@@ -207,9 +270,16 @@ export function saveWallet(wallet, { imported = false } = {}) {
 
   const file = walletPath();
   const tmp = path.join(dir, `.wallet.json.${process.pid}.tmp`);
+  // The phrase is written first and the key alongside it, because a user who
+  // opens this file looking for something to back up should find the phrase.
+  // The key stays even for a phrase wallet: it costs nothing, and it means an
+  // install whose derivation this plugin later changes can still be recovered
+  // by hand from the file it already had.
   const body = JSON.stringify(
     {
       address: wallet.address,
+      mnemonic: wallet.mnemonic ?? undefined,
+      derivationPath: wallet.mnemonic ? (wallet.derivationPath ?? SOLANA_PATH) : undefined,
       secretKey: wallet.secretKey,
       imported,
       createdAt: wallet.createdAt ?? new Date().toISOString(),
@@ -231,11 +301,18 @@ export function saveWallet(wallet, { imported = false } = {}) {
   return file;
 }
 
-/** The wallet, creating and persisting one on first use. */
+/**
+ * The wallet, creating and persisting one on first use.
+ *
+ * A wallet created here is always phrase-backed, so the Base key derives from
+ * the same backup. An existing wallet is returned untouched whatever shape it
+ * is in -- upgrading a raw key in place is impossible (there is no phrase that
+ * derives it) and silently replacing one would abandon its earnings.
+ */
 export function ensureWallet() {
   const existing = loadWallet();
   if (existing) return { wallet: existing, created: false };
-  const wallet = generateWallet();
+  const wallet = generateMnemonicWallet();
   saveWallet(wallet);
   return { wallet, created: true };
 }
