@@ -112,9 +112,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
-    if "$NODE_BIN" -e '
-      const fs=require("fs"), p=process.argv[1];
-      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8")); } catch { process.exit(1); }
+    if PRMPT_CFG="$f" "$NODE_BIN" -e '
+      const fs=require("fs"), p=process.env.PRMPT_CFG;
+      let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
         const groups=j.hooks[ev];
@@ -132,7 +132,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
       if (!hit) process.exit(2);
       fs.copyFileSync(p, p+".bak");
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-    ' "$f" 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
+    ' 2>/dev/null; then ok "cleaned $f (backup: $f.bak)"; fi
   done
   for f in "$HOME/.config/amp/plugins/prmpt.ts" "./.amp/plugins/prmpt.ts"; do
     [ -f "$f" ] && rm -f "$f" && ok "removed $f"
@@ -188,7 +188,16 @@ else
   fi
 fi
 
-HOOK="$INSTALL_DIR/hooks/turn-end.mjs"
+# On Windows the installer runs under Git Bash, but every agent that will read
+# the config is a native Windows program. It cannot resolve an MSYS path like
+# /c/Users/foo, so the path recorded in the config must be converted first --
+# otherwise the install looks perfect and the hook never once runs.
+HOOK_DIR="$INSTALL_DIR"
+if command -v cygpath >/dev/null 2>&1; then
+  HOOK_DIR=$(cygpath -m "$INSTALL_DIR" 2>/dev/null || printf '%s' "$INSTALL_DIR")
+fi
+
+HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
 
 # ------------------------------------------------------------------------ link
@@ -231,11 +240,22 @@ merge_hook() {
   file="$1"; event="$2"; timeout="$3"; matcher="$4"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
+  # Values reach the program through the ENVIRONMENT, never argv. install.ps1
+  # runs the identical program, and PowerShell drops an empty-string argument to
+  # a native command outright -- Claude Code and Codex pass an empty matcher, so
+  # every later argument shifted by one and the hook path went missing. The
+  # environment preserves an empty value and needs no quoting on either side.
+  PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$HOOK" \
   "$NODE_BIN" -e '
     const fs=require("fs");
-    const [p,event,timeout,matcher,hook]=process.argv.slice(1);
+    const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
+    const timeout=process.env.PRMPT_TIMEOUT, matcher=process.env.PRMPT_MATCHER||"";
+    const hook=process.env.PRMPT_HOOK;
     let j={};
-    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").trim() : "";
+    // Strip a BOM before parsing: Windows tooling writes them, JSON.parse rejects
+    // them, and refusing to touch the file would leave the user silently unwired.
+    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
     if (raw) {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
@@ -251,12 +271,15 @@ merge_hook() {
         g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
       }
     }
-    const entry = { type:"command", command:`node ${JSON.stringify(hook).slice(1,-1)}`, timeout:Number(timeout) };
+    // Quoted, because the install dir routinely contains a space: macOS puts
+    // it under "Application Support" and Windows under "C:/Users/Jane Smith".
+    // An unquoted path there produces a config that parses and never runs.
+    const entry = { type:"command", command:`node ${JSON.stringify(hook)}`, timeout:Number(timeout) };
     if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
-  ' "$file" "$event" "$timeout" "$matcher" "$HOOK"
+  '
 }
 
 want() {
