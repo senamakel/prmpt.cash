@@ -238,12 +238,15 @@ finished turn, but neither documents a way for that hook to show you anything �
 so an ad could be matched and never displayed, and you would earn nothing from
 it. We would rather leave them out than take the impression.
 
-**The Windows installer is unverified.** `install.ps1` mirrors `install.sh`
-step for step and delegates every JSON edit to the same Node one-liners, so the
-merge behaviour is identical by construction rather than reimplemented — but it
-has not been run against a real Windows install here. Treat it as unverified
-and please report anything that does not match. `install.sh` works under WSL if
-you would rather stay on a tested path.
+**The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
+`install.sh` step for step and delegates every JSON edit to the same Node
+one-liners, so the merge behaviour is identical by construction rather than
+reimplemented. CI runs both of them on a Windows runner — install, re-install,
+uninstall, and executing the recorded command through `cmd.exe` — and checks
+the two installers write the same entry. What is still unverified is a hook
+firing inside a real Windows agent session, which needs credentials CI does not
+have. `install.sh` works under WSL if you would rather stay on the path with the
+most mileage.
 
 **The Amp integration is unverified.** It is written against Amp's documented
 plugin API but has not been run against a live Amp install. The Claude Code,
@@ -276,14 +279,45 @@ otherwise runs the installer from a checkout.
 ## Development
 
 ```sh
-node --test test/*.test.mjs      # no network, no dependencies
+npm test           # the hook's own behaviour: fast, no network, no dependencies
+npm run test:smoke # installation: the installer against real agents, on this OS
+npm run test:all   # both
 ```
 
-The suite spawns the real hook and the real CLI as subprocesses against stub
+`npm test` spawns the real hook and the real CLI as subprocesses against stub
 servers on ephemeral ports, so it exercises exit codes, streams and the wire
 rather than internal functions. The stub verifies SIWS signatures the same way
 `backend/internal/auth/siws.go` does — against the exact message it minted — so
 a client that rebuilt the message locally fails there rather than in production.
+
+`npm run test:smoke` covers the step before that one, which is easy to get wrong
+and impossible to notice: running the installer for real, then executing the
+exact command string it wrote into each agent's config, on the platform that
+would have to execute it. Everything it has found so far installed cleanly,
+reported success, and never ran —
+
+- an unquoted hook path, so any install directory containing a space broke it
+  (`Application Support`, or a Windows user named `Jane Smith`);
+- a Git Bash install recording an MSYS path (`/c/Users/...`) that no native
+  Windows agent can resolve;
+- `install.ps1` failing its own Node version check on every version of Node,
+  because PowerShell does not escape quotes inside an argument to a native
+  command — it had never worked;
+- `Set-Content -Encoding utf8` writing a BOM, after which the merge step refused
+  to touch its own freshly created file and wired up nothing;
+- PowerShell dropping an empty-string argument, which shifted every later value
+  along by one and lost the hook path entirely.
+
+CI runs it on Linux, macOS and Windows, and a second job installs Claude Code,
+Codex and Gemini CLI from npm and runs the installer next to them. All three
+install unauthenticated, so everything short of a live turn is testable —
+autodetection, `claude plugin validate --strict`, and the hook serving a real
+sponsored block through each host's documented payload. What CI cannot do is
+watch a hook fire inside a real session; that needs credentials, and the suite
+says so rather than implying otherwise.
+
+The smoke suite skips any agent that is not installed, so it is useful locally
+with only the agents you happen to have. In CI a skip is a failure.
 
 Point at a local backend:
 
