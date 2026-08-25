@@ -36,7 +36,7 @@ import { loginWithWallet } from '../hooks/lib/login.mjs';
 import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
-import { exchangeInstallCode, createWebSession } from '../hooks/lib/api.mjs';
+import { exchangeInstallCode, createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
 import { normalizeCode, validateCode } from '../hooks/lib/install-code.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
@@ -97,6 +97,11 @@ usage: prmpt <command> [options]
                              --version <tag> pins to a specific release, which
                              may be a downgrade; --dry-run says what it would do.
   version                    What is installed here.
+
+  link-evm                   Prove this machine's Base address and attach it to
+                             this install's existing account. Run automatically
+                             in the background by installs created before
+                             payouts settled on Base.
 
   link <code>                The dashboard route: prove the wallet in a browser
                              and redeem the one-off code it mints. Use this when
@@ -465,6 +470,72 @@ function openInBrowser(url) {
   }
 }
 
+/**
+ * Prove this machine's Base address and attach it to the account the stored
+ * token already speaks for.
+ *
+ * Deliberately NOT `login`. Login signs in as whatever key is on this machine,
+ * which on an install linked by dashboard code would switch the publisher to a
+ * different account entirely. This only ever ADDS an address to the existing
+ * one, so it is safe to run unattended — which the hook does, to backfill
+ * installs created before payouts were two-chain.
+ */
+async function cmdLinkEvm() {
+  const stored = readStoredConfig();
+  const envToken = (process.env.PRMPT_TOKEN || process.env.PRMPT_API_KEY || '').trim();
+  const token = envToken || (typeof stored.token === 'string' ? stored.token.trim() : '');
+  if (!token) {
+    throw new UserError("this install has no token yet -- run 'prmpt login' first");
+  }
+
+  const wallet = loadWallet();
+  if (!wallet) {
+    throw new UserError(
+      "there is no wallet on this machine to prove.\n" +
+      "  This install was linked with a dashboard code, so its key lives elsewhere.\n" +
+      "  Link a Base address from the dashboard instead: prmpt dashboard",
+    );
+  }
+  // Refuse when the local key is not the account's own. Attaching an address we
+  // hold to somebody else's publisher is exactly the mistake the SIWS work was
+  // done to make impossible; the backend would allow it, since the token is
+  // valid, so the refusal belongs here.
+  if (stored.solanaWallet && stored.solanaWallet !== wallet.address) {
+    throw new UserError(
+      `this install earns into ${stored.solanaWallet}, but the key here is ${wallet.address}.\n` +
+      '  Linking would attach a Base address you hold to an account you do not.\n' +
+      "  Use the dashboard instead: prmpt dashboard",
+    );
+  }
+
+  const endpoint = resolveEndpoint();
+  const { wallet: evm } = ensureEvmWallet(wallet);
+
+  const challenge = await evmChallenge({ endpoint, address: evm.address });
+  if (challenge.address.toLowerCase() !== evm.address.toLowerCase()) {
+    throw new UserError(`the challenge is for ${challenge.address}, not ${evm.address}`);
+  }
+  const publisher = await linkEvmWallet({
+    endpoint,
+    token,
+    address: evm.address,
+    nonce: challenge.nonce,
+    signature: evm.sign(challenge.message),
+  });
+
+  writeConfig({
+    evmWallet: publisher.evmWallet ?? evm.address,
+    payoutToken: publisher.payoutToken ?? undefined,
+    payoutChain: publisher.payoutChain ?? undefined,
+  });
+
+  out('prmpt: linked a Base address to this install.');
+  out(`  base:    ${publisher.evmWallet ?? evm.address}`);
+  if (publisher.payoutToken) {
+    out(`  paid in: ${publisher.payoutToken}${publisher.payoutChain ? ` on ${publisher.payoutChain}` : ''}`);
+  }
+}
+
 async function cmdLink(args) {
   const [raw] = args;
   if (!raw) throw new UserError('usage: prmpt link <install-code>');
@@ -555,6 +626,7 @@ export async function run(argv) {
     case 'dashboard':
     case 'web':        return cmdDashboard(args);
     case 'link':       return cmdLink(args);
+    case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
     case 'help':
     case '-h':

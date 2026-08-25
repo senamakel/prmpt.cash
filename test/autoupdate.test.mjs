@@ -32,14 +32,24 @@ import {
 function fakeInstall(version = '0.1.0') {
   const dir = tmpDir('prmpt-install-');
   for (const sub of ['hooks/lib', 'bin']) fs.mkdirSync(path.join(dir, sub), { recursive: true });
-  for (const rel of [
-    'hooks/turn-end.mjs', 'hooks/link.mjs',
-    'hooks/lib/config.mjs', 'hooks/lib/api.mjs', 'hooks/lib/enrol.mjs',
-    'hooks/lib/autoupdate.mjs', 'hooks/lib/update.mjs', 'hooks/lib/release.mjs',
-    'hooks/lib/version.mjs', 'hooks/lib/wallet.mjs', 'hooks/lib/base58.mjs',
-    'hooks/lib/login.mjs', 'hooks/lib/install-code.mjs', 'bin/prmpt.mjs',
-  ]) {
+
+  // hooks/lib is copied WHOLESALE rather than as a named list, because a named
+  // list is a second inventory of the plugin that nothing keeps in step. It
+  // silently went stale the moment turn-end.mjs imported a new module: the
+  // fixture omitted the file, the hook died on MODULE_NOT_FOUND, and six
+  // auto-update tests failed for a reason that had nothing to do with
+  // auto-updating. The real installer untars the whole tree, so this is also
+  // the more faithful fixture.
+  for (const rel of ['hooks/turn-end.mjs', 'hooks/link.mjs', 'bin/prmpt.mjs']) {
     fs.copyFileSync(path.join(PLUGIN_DIR, rel), path.join(dir, rel));
+  }
+  for (const entry of fs.readdirSync(path.join(PLUGIN_DIR, 'hooks', 'lib'))) {
+    if (entry.endsWith('.mjs')) {
+      fs.copyFileSync(
+        path.join(PLUGIN_DIR, 'hooks', 'lib', entry),
+        path.join(dir, 'hooks', 'lib', entry),
+      );
+    }
   }
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'prmpt', version }));
 
