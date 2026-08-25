@@ -26,6 +26,17 @@ export function configPath() {
   return path.join(configDir(), 'config.json');
 }
 
+/**
+ * The on-disk config, verbatim and with no env layered over it.
+ *
+ * Exported for the CLI: `prmpt status` has to be able to say whether a token
+ * came from the file or from PRMPT_TOKEN in the caller's shell, and `loadConfig`
+ * has already collapsed that distinction by the time it returns.
+ */
+export function readStoredConfig() {
+  return readConfigFile();
+}
+
 function readConfigFile() {
   try {
     const raw = fs.readFileSync(configPath(), 'utf8');

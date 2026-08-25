@@ -7,8 +7,9 @@ matches what you just did. Almost always the answer is no and nothing prints. On
 match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
 price lands in your Solana wallet as USDC**, usually within a second.
 
-Zero runtime dependencies. Plain ESM. Node 18+. Works with Claude Code, Codex,
-Gemini CLI and Amp.
+It creates the wallet itself, so installing is one command with nothing to sign
+up for. Zero runtime dependencies. Plain ESM. Node 18+. Works with Claude Code,
+Codex, Gemini CLI and Amp.
 
 ---
 
@@ -17,41 +18,49 @@ Gemini CLI and Amp.
 **macOS / Linux**
 
 ```sh
-curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+curl -fsSL https://prmpt.click/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-$env:PRMPT_CODE = "<install-code>"; irm https://prmpt.click/install.ps1 | iex
-```
-
-A piped script cannot take parameters, hence the environment variable. To pass
-them properly, run it as a scriptblock instead:
-
-```powershell
-& ([scriptblock]::Create((irm https://prmpt.click/install.ps1))) -Code <install-code>
+irm https://prmpt.click/install.ps1 | iex
 ```
 
 That detects the agents you have, wires each one up using *its own* documented
-hook, redeems your install code, and stores the resulting token at mode 0600.
-Restart your agent and carry on working.
+hook, **creates a Solana wallet for you**, proves it to the backend by signature
+and stores both at mode 0600. Restart your agent and carry on working. There is
+no account to make and no code to paste.
 
-Get the code from the dashboard: sign in with your wallet, then choose "Link a
-plugin install". It works once and expires in ten minutes.
+Already have a wallet you would rather be paid into? Import it, then sign in:
+
+```sh
+prmpt wallet import <secret-key>   # Phantom / Solflare export, or a solana-keygen id.json
+prmpt login
+```
+
+And if you would rather the key never touched this machine at all, the dashboard
+route still works exactly as before — prove your wallet there with a real wallet
+extension and redeem the one-off code it mints:
+
+```sh
+curl -fsSL https://prmpt.click/install.sh | sh -s -- --code <install-code>
+```
 
 Prefer to read it first? It is one POSIX shell file — [`install.sh`](install.sh).
 
 ```sh
 git clone https://github.com/senamakel/prmpt.click
-./prmpt.click/install.sh --code <install-code>
+./prmpt.click/install.sh
 ```
 
 <details>
 <summary>Options</summary>
 
 ```
---code <code>        one-off install code from the dashboard
+--code <code>        redeem a dashboard install code instead of creating a
+                     wallet here — use it to keep the key off this machine
+--no-login           install and wire up the agents, but create no wallet
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -63,35 +72,72 @@ git clone https://github.com/senamakel/prmpt.click
 Re-running is safe — it upgrades in place, and replaces its own hook entry rather
 than appending, so you cannot end up with duplicates.
 
-## Getting paid
+## The wallet
 
-Any wallet that can hold an SPL token works: Phantom, Solflare, Backpack.
-
-Your wallet **signs** a one-line message in the dashboard to prove it is yours.
-It authorises no transaction and moves no funds. That signature is what binds
-the address to your account — before it existed, an address was merely typed in,
-so anyone could have claimed yours and been paid into it.
-
-A terminal cannot open a wallet prompt, which is why the browser hands you a
-one-off code instead and the plugin redeems that:
+The plugin holds its own Solana keypair and signs in with it. That is what makes
+first run self-service: Sign-In With Solana asks the server for a one-time
+challenge, signs the exact message it minted, and gets back a publisher JWT.
+First sign-in is signup, so nothing has to exist beforehand.
 
 ```sh
-node ~/.local/share/prmpt/hooks/link.mjs <install-code>
+prmpt login                     # create a wallet if there isn't one, and sign in
+prmpt status                    # wallet, token, expiry, endpoint — nothing secret
+prmpt wallet                    # print the address
+prmpt wallet new [--force]      # generate a fresh key
+prmpt wallet import <secret>    # adopt a key you already have (- reads stdin)
+prmpt wallet export [--json]    # print the secret key, to back it up
+prmpt link <install-code>       # the dashboard route
+prmpt logout                    # forget the token; the key is left alone
 ```
 
-The code works once and expires in ten minutes. On success:
+The hook also enrols itself: an install with no token detaches a `prmpt login`
+child on the first turn and serves normally from the next one. It is never on
+the turn's own clock — two round trips against a cold backend is many times the
+1.5s budget. `PRMPT_NO_AUTO_ENROL=1` turns that off.
+
+### Say the quiet part out loud
+
+**A generated wallet is a hot wallet.** The key sits in cleartext at mode 0600:
+
+```
+~/.config/prmpt/wallet.json          mode 0600, the only copy
+{ "address": …, "secretKey": …, "imported": false, "createdAt": … }
+```
+
+Anyone who can read that file can sign as you and move anything the address
+holds. It is sized for ad revenue, not savings. Three consequences worth acting
+on:
+
+- **Back it up.** `prmpt wallet export` prints a base58 key that Phantom,
+  Solflare and Backpack all import; `--json` prints the `solana-keygen` array
+  form. Lose the file without a backup and the earnings paid to that address are
+  gone with it. Neither `--uninstall` deletes it, on purpose.
+- **Or bring your own.** `prmpt wallet import` takes any of those formats, so
+  payouts can land in a wallet you already control and already back up.
+- **Or keep the key off the box entirely.** `prmpt link <code>` still works. The
+  dashboard is the only place a real wallet prompt can open, and an install
+  linked that way never has a local key at all.
+
+`prmpt wallet export` writes the key to stdout and its warning to stderr, so
+`prmpt wallet export > key.txt` captures exactly the key.
+
+### The token
 
 ```
 ~/.config/prmpt/config.json          mode 0600
 { "installId": …, "token": …, "endpoint": …, "solanaWallet": … }
 ```
 
+Deliberately a different file from the key: config.json is rewritten by every
+code path that touches settings, and it is the file people paste into bug
+reports. The key stays out of both blast radii.
+
 The token is never echoed, never logged, and never appears in hook output — it
 travels only in the `Authorization: Bearer` header of the serve request.
 
 It is also long-lived and **cannot be revoked**: it stays valid until it
-expires, so treat that config file as the credential it is. Deleting it stops
-this install serving; it does not invalidate a copy taken beforehand.
+expires, so treat that config file as the credential it is. `prmpt logout`
+forgets it locally; it does not invalidate a copy taken beforehand.
 
 ## What it looks like
 
@@ -112,6 +158,9 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
   or missing key it prints nothing and exits 0.
 - Gemini CLI runs hooks *synchronously inside the agent loop*, so a slow hook
   would stall your turn. That is exactly why the budget exists.
+- **Signing in is never on the turn's clock.** Self-enrolment detaches a child
+  and returns immediately; the turn that triggers it serves nothing and takes
+  about as long as an exit.
 - Nothing is installed but the plugin itself. No dependencies to audit.
 
 Turn it off without uninstalling:
@@ -171,17 +220,33 @@ npm run test:smoke # installation: the installer against real agents, on this OS
 npm run test:all   # both
 ```
 
-`npm test` covers what the hook does with a payload. `npm run test:smoke` covers
-the part that is easy to get wrong and impossible to notice — running the
-installer for real, then executing the exact command string it wrote into each
-agent's config, on the platform that would have to execute it. It found an
-unquoted install path (anything under `Application Support`, or a Windows user
-whose name has a space) and a Git Bash install recording an `/c/Users/...` path
-that no Windows agent can resolve. Both installed cleanly and never once ran.
+`npm test` spawns the real hook and the real CLI as subprocesses against stub
+servers on ephemeral ports, so it exercises exit codes, streams and the wire
+rather than internal functions. The stub verifies SIWS signatures the same way
+`backend/internal/auth/siws.go` does — against the exact message it minted — so
+a client that rebuilt the message locally fails there rather than in production.
+
+`npm run test:smoke` covers the step before that one, which is easy to get wrong
+and impossible to notice: running the installer for real, then executing the
+exact command string it wrote into each agent's config, on the platform that
+would have to execute it. Everything it has found so far installed cleanly,
+reported success, and never ran —
+
+- an unquoted hook path, so any install directory containing a space broke it
+  (`Application Support`, or a Windows user named `Jane Smith`);
+- a Git Bash install recording an MSYS path (`/c/Users/...`) that no native
+  Windows agent can resolve;
+- `install.ps1` failing its own Node version check on every version of Node,
+  because PowerShell does not escape quotes inside an argument to a native
+  command — it had never worked;
+- `Set-Content -Encoding utf8` writing a BOM, after which the merge step refused
+  to touch its own freshly created file and wired up nothing;
+- PowerShell dropping an empty-string argument, which shifted every later value
+  along by one and lost the hook path entirely.
 
 CI runs it on Linux, macOS and Windows, and a second job installs Claude Code,
-Codex and Gemini CLI from npm and runs the installer next to them. The agents
-all install unauthenticated, so everything short of a live turn is testable —
+Codex and Gemini CLI from npm and runs the installer next to them. All three
+install unauthenticated, so everything short of a live turn is testable —
 autodetection, `claude plugin validate --strict`, and the hook serving a real
 sponsored block through each host's documented payload. What CI cannot do is
 watch a hook fire inside a real session; that needs credentials, and the suite
@@ -203,10 +268,15 @@ export PRMPT_ENDPOINT=http://localhost:8080/graphql
 ```
 
 Your hook entries are removed and each touched config is backed up next to
-itself as `.bak`. The token at `~/.config/prmpt/config.json` is left alone —
-delete it too to stop this install serving. Note that deleting it does not
-revoke the token: nothing can, and a copy taken beforehand keeps working until
-it expires.
+itself as `.bak`.
+
+**Neither your token nor your wallet key is deleted**, on purpose:
+`~/.config/prmpt/wallet.json` is the only copy of a key that may hold money, and
+removing an ad plugin is not a reason to destroy it. Export it first if you want
+it, then delete the directory yourself.
+
+Deleting the token stops this install serving. It does not revoke it — nothing
+can, and a copy taken beforehand keeps working until it expires.
 
 ## License
 
