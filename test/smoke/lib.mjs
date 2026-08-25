@@ -112,27 +112,55 @@ export function smokeEnv(home, extra = {}) {
 /**
  * Spawn anything and collect exit code and both streams.
  *
- * The deadline is enforced here rather than by spawn's own `timeout`. With
- * `shell: true` Node's timeout kills the shell, not the program the shell
- * started, so the pipes stay open, `close` never fires, and the promise hangs
- * for as long as the CI job is allowed to run. On Windows the whole process
- * TREE has to go, which is what taskkill /T is for. A timed-out call resolves
- * with `timedOut: true` and a non-zero code so a test fails saying what hung.
+ * The deadline is enforced here rather than by spawn's own `timeout`, and it
+ * settles the promise itself rather than waiting to be told the child is gone.
+ * Both parts are load-bearing on Windows:
+ *
+ *   - with `shell: true`, Node's timeout kills the shell, not the program the
+ *     shell started, so the real process survives;
+ *   - `close` fires only once every stdio stream is closed, and a surviving
+ *     grandchild holds those pipes open forever.
+ *
+ * `claude doctor` hit exactly that and hung two CI jobs for the full twenty
+ * minutes. So: kill the process TREE, abandon the pipes, and resolve with
+ * `timedOut: true` so the caller can say what hung instead of disappearing.
  */
 export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 180_000, shell = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { env, cwd, stdio: ['pipe', 'pipe', 'pipe'], shell });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
     let timedOut = false;
+
+    const settle = (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(killer);
+      if (timedOut) stderr += `\n[smoke] killed after ${timeout}ms: ${command}`;
+      resolve({ code: timedOut ? (code ?? 124) : code, signal, stdout, stderr, timedOut });
+    };
+
     const killer = setTimeout(() => {
       timedOut = true;
       if (IS_WINDOWS && child.pid) {
+        // /T for the tree: the shell's children are what actually need killing.
         try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']); } catch { /* already gone */ }
       }
-      child.kill('SIGKILL');
+      try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      // Give the kill a moment to produce a real exit, then stop waiting for
+      // one. Abandoning the pipes also lets this process exit afterwards.
+      const giveUp = setTimeout(() => {
+        for (const s of [child.stdin, child.stdout, child.stderr]) {
+          try { s.destroy(); } catch { /* already closed */ }
+        }
+        try { child.unref(); } catch { /* already gone */ }
+        settle(124, 'SIGKILL');
+      }, 2000);
+      if (typeof giveUp.unref === 'function') giveUp.unref();
     }, timeout);
     if (typeof killer.unref === 'function') killer.unref();
-    let stdout = '';
-    let stderr = '';
+
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (c) => { stdout += c; });
@@ -141,12 +169,9 @@ export function exec(command, args, { env, cwd = PLUGIN_DIR, stdin, timeout = 18
     // resulting EPIPE is not a test failure.
     child.stdin.on('error', () => {});
     child.stdin.end(stdin ?? '');
-    child.on('error', (err) => { clearTimeout(killer); reject(err); });
-    child.on('close', (code, signal) => {
-      clearTimeout(killer);
-      if (timedOut) stderr += `\n[smoke] killed after ${timeout}ms: ${command}`;
-      resolve({ code: timedOut ? (code ?? 124) : code, signal, stdout, stderr, timedOut });
-    });
+
+    child.on('error', (err) => { clearTimeout(killer); if (!settled) { settled = true; reject(err); } });
+    child.on('close', settle);
   });
 }
 
