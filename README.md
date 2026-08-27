@@ -53,19 +53,12 @@ and carry on working. There is no account to make and no code to paste.
 Pin a version with `--version v0.2.0`; releases are at
 [github.com/senamakel/prmpt.cash/releases](https://github.com/senamakel/prmpt.cash/releases).
 
-Already have a wallet you would rather be paid into? Import it, then sign in:
+Already have a wallet you would rather be paid into? Import its seed phrase or
+private key locally, then sign in:
 
 ```sh
-prmpt wallet import <secret-key>   # Phantom / Solflare export, or a solana-keygen id.json
+prmpt wallet import -              # reads the phrase or private key from stdin
 prmpt login
-```
-
-And if you would rather the key never touched this machine at all, the dashboard
-route still works exactly as before. Prove your wallet there with a real wallet
-extension and redeem the one-off code it mints:
-
-```sh
-curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
 ```
 
 **In Claude Code** you can install it as a plugin instead:
@@ -86,8 +79,6 @@ git clone https://github.com/senamakel/prmpt.cash
 <summary>Options</summary>
 
 ```
---code <code>        redeem a dashboard install code instead of creating a
-                     wallet here; use it to keep the key off this machine
 --no-login           install and wire up the agents, but create no wallet
 --version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
@@ -126,7 +117,6 @@ prmpt wallet mnemonic           # print the seed phrase; this is the backup
 prmpt wallet new [--force]      # generate a fresh phrase and both keys
 prmpt wallet import <secret>    # adopt a phrase, or a Solana key (- reads stdin)
 prmpt wallet export [--json]    # print the Solana secret key
-prmpt link <install-code>       # the dashboard route
 prmpt logout                    # forget the token; the keys are left alone
 ```
 
@@ -163,10 +153,6 @@ on:
   wallet you already control and already back up. An imported raw key has no phrase behind
   it, so a separate Base key is generated and stored in `evm.json`; back that up
   too, or import a phrase instead and avoid the second file entirely.
-- **Or keep the key off the box entirely.** `prmpt link <code>` still works. The
-  dashboard is the only place a real wallet prompt can open, and an install
-  linked that way never has a local key at all.
-
 `prmpt wallet export` writes the key to stdout and its warning to stderr, so
 `prmpt wallet export > key.txt` captures exactly the key.
 

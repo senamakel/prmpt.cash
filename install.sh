@@ -1,15 +1,12 @@
 #!/bin/sh
 # prmpt.cash -- one installer for every supported coding agent.
 #
-#   curl -fsSL https://prmpt.cash/install.sh | sh -s -- --code <install-code>
-#
-# Or, from a checkout:  ./install.sh --code <install-code>
+#   curl -fsSL https://prmpt.cash/install.sh | sh
 #
 # What it does, in order:
 #   1. checks Node >= 18                (the hook is plain ESM, no dependencies)
 #   2. copies the plugin to a stable directory
 #   3. creates a Solana wallet and signs in with it, storing both at mode 0600
-#      (or redeems --code instead, if you would rather keep the key elsewhere)
 #   4. wires up every agent it finds, using that agent's own documented hook
 #
 # It is idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -28,7 +25,6 @@ TARBALL_URL="https://codeload.github.com/$REPO_SLUG/tar.gz/refs/heads/main"
 DEFAULT_ENDPOINT="https://api.prmpt.cash/graphql"
 VERSION=""
 
-CODE=""
 ENDPOINT=""
 AGENTS=""
 UNINSTALL=0
@@ -53,8 +49,6 @@ usage() {
   cat <<USAGE
 ${B}prmpt.cash installer${R}
 
-  --code <code>        Redeem a dashboard install code instead of creating a
-                       wallet here. Use it when the key must stay off this box.
   --no-login           Install and wire up the agents, but create no wallet
                        (PRMPT_NO_LOGIN=1 does the same, for scripted installs)
   --version <tag>      Install a specific release, e.g. v0.2.0 (default: latest)
@@ -70,11 +64,13 @@ signature -- no browser, no code to paste. The key is written to
 ~/.config/prmpt/wallet.json at mode 0600 and is the only copy: it is a hot
 wallet holding ad revenue, so back it up with 'prmpt wallet export'.
 
-Two other routes, both first-class:
+To use an existing wallet, install first and then import its seed phrase or
+private key locally:
 
-  --code <code>   prove a wallet in the dashboard with a real wallet extension
-                  and redeem the one-off code it mints. The key never touches
-                  this machine.
+                    <install-dir>/bin/prmpt.mjs wallet import -
+
+One other route is available:
+
   --no-login      install now, decide later:
                     <install-dir>/bin/prmpt.mjs login
                     <install-dir>/bin/prmpt.mjs wallet import <secret-key>
@@ -86,8 +82,6 @@ while [ $# -gt 0 ]; do
     --no-login)  NO_LOGIN=1; shift ;;
     --version)   VERSION="${2:-}"; shift 2 ;;
     --version=*) VERSION="${1#*=}"; shift ;;
-    --code)      CODE="${2:-}"; shift 2 ;;
-    --code=*)    CODE="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
     --agents=*)  AGENTS="${1#*=}"; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
@@ -293,11 +287,7 @@ HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 # ------------------------------------------------------------------------ link
 CLI="$INSTALL_DIR/bin/prmpt.mjs"
 say ""
-if [ -n "$CODE" ]; then
-  say "${B}Linking this install${R}"
-  PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" link "$CODE" \
-    || die "linking failed -- nothing was wired up. Fix the above and re-run."
-elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
+if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json" ]; then
   skip "already linked (${D}~/.config/prmpt/config.json${R})"
 elif [ "$NO_LOGIN" -eq 1 ]; then
   warn "--no-login: the hook will stay silent until you run"

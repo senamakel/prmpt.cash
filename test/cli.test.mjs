@@ -43,9 +43,18 @@ test('help lists the commands and exits 0', async () => {
   const home = tempHome();
   const { code, stdout } = await prmpt(['help'], home);
   assert.equal(code, 0);
-  for (const fragment of ['login', 'status', 'logout', 'wallet new', 'wallet import', 'wallet export', 'link']) {
+  for (const fragment of ['login', 'status', 'logout', 'wallet new', 'wallet import', 'wallet export', 'link-evm']) {
     assert.ok(stdout.includes(fragment), `help should mention ${fragment}`);
   }
+  assert.doesNotMatch(stdout, /^\s+link <code>/m);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('the retired address-only link command is unavailable', async () => {
+  const home = tempHome();
+  const { code, stderr } = await prmpt(['link', 'K3H9F-2QPRS'], home);
+  assert.equal(code, 1);
+  assert.match(stderr, /unknown command: link/);
   fs.rmSync(home, { recursive: true, force: true });
 });
 
@@ -275,17 +284,5 @@ test('logout forgets the token and leaves the wallet alone', async () => {
   assert.equal(config.installId, 'abc');
   assert.equal((await prmpt(['wallet'], home)).stdout.trim(), address);
 
-  fs.rmSync(home, { recursive: true, force: true });
-});
-
-test('link rejects a malformed code before spending a round trip', async () => {
-  const home = tempHome();
-  const { code, stderr } = await prmpt(['link', 'ABC'], home, {
-    // If validation ever stopped happening first, this endpoint would make the
-    // failure a connection error rather than the message asserted below.
-    PRMPT_ENDPOINT: 'http://127.0.0.1:1/graphql',
-  });
-  assert.equal(code, 1);
-  assert.match(stderr, /invalid install code/);
   fs.rmSync(home, { recursive: true, force: true });
 });

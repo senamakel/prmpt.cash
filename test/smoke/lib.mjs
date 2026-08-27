@@ -29,12 +29,6 @@ export const INSTALL_SH = path.join(PLUGIN_DIR, 'install.sh');
 export const INSTALL_PS1 = path.join(PLUGIN_DIR, 'install.ps1');
 export const IS_WINDOWS = process.platform === 'win32';
 
-/**
- * A well-formed install code: ten characters of the backend's alphabet, which
- * omits everything that gets misread off a screen (no I, L, O, U, 0 or 1).
- */
-export const TEST_CODE = 'K3H9F2QPRS';
-
 /** The token a stub backend hands back. Nothing may ever print it. */
 export const TEST_TOKEN = 'eyJ.smoke.SECRET_TOKEN_MUST_NEVER_BE_PRINTED';
 

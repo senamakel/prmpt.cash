@@ -23,14 +23,15 @@ Then export your key (Amp inherits your shell environment):
 ```bash
 export PRMPT_TOKEN="eyJhbGciOi..."
 export PRMPT_ENDPOINT="https://api.prmpt.cash/graphql"   # optional, this is the default
-export PRMPT_INSTALL_ID="..."                           # from link.mjs
+export PRMPT_INSTALL_ID="..."                           # from prmpt status
 export PRMPT_DISABLED=1                                 # turn serving off
 ```
 
-Get the key and install id the same way as every other host:
+Create or import a local wallet and sign in the same way as every other host:
 
 ```bash
-node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
+prmpt wallet import -   # omit this line to create a fresh wallet
+prmpt login
 ```
 
 ## How it works

@@ -1,9 +1,8 @@
 // prmpt -- the backend GraphQL client.
 //
-// Two callers: the end-of-turn hook (serveAd) and the link CLI
-// (exchangeInstallCode). serveAd never throws: it resolves to null on any
-// failure at all, because a failed ad request must be indistinguishable from
-// "no ad matched".
+// Used by the end-of-turn hook and the interactive wallet/dashboard commands.
+// serveAd never throws: it resolves to null on any failure at all, because a
+// failed ad request must be indistinguishable from "no ad matched".
 
 import { currentVersion } from './version.mjs';
 
@@ -13,29 +12,6 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
     headline
     body
     clickUrl
-  }
-}`;
-
-// The dashboard route into an account: a browser proves a wallet with a real
-// wallet extension and mints a one-off code, which this exchanges for the
-// plugin's own long-lived token.
-//
-// Still the right flow for anyone whose key must never touch this machine. The
-// SIWS pair below is the other route -- the plugin signs with a key it holds
-// itself, which needs no browser at all. See hooks/lib/wallet.mjs.
-//
-// installId lives on the nested `publisher`, not on the payload. Asking for it
-// at the top level is a VALIDATION error, so the request fails with HTTP 422
-// before a response body exists -- which the tolerant parsing below can do
-// nothing about, because it never runs.
-const EXCHANGE_INSTALL_CODE = `mutation ExchangeInstallCode($code: String!) {
-  exchangeInstallCode(code: $code) {
-    token
-    expiresAt
-    publisher {
-      installId
-      solanaWallet
-    }
   }
 }`;
 
@@ -80,10 +56,8 @@ const LINK_EVM_WALLET = `mutation LinkEvmWallet($address: String!, $nonce: Strin
 
 // The dashboard route out of the terminal: mint a one-off code and open it.
 //
-// The exact inverse of exchangeInstallCode -- there, a browser proved a wallet
-// and handed a code to the plugin; here the plugin proves one and hands a code
-// to the browser. It exists because a key this plugin generated has no wallet
-// extension anywhere, so the dashboard's connect button can do nothing for it.
+// The plugin proves its locally held wallet and hands a short-lived code to the
+// browser, so the dashboard can open without moving the key.
 const CREATE_WEB_SESSION = `mutation CreateWebSession {
   createWebSession {
     code
@@ -205,37 +179,6 @@ export async function serveAd(config, input) {
 }
 
 /**
- * Redeem a one-off install code for this install's own token.
- *
- * Unlike serveAd this one throws, because the link CLI is interactive and the
- * publisher needs to see why it failed. The code is single-use: a failure here
- * means going back to the dashboard for a fresh one.
- */
-export async function exchangeInstallCode({ endpoint, code, timeoutMs = 15000 }) {
-  const data = await graphql({
-    endpoint,
-    query: EXCHANGE_INSTALL_CODE,
-    variables: { code },
-    timeoutMs,
-  });
-
-  const node = data?.exchangeInstallCode;
-  if (!node || typeof node !== 'object') {
-    throw new Error('prmpt: exchangeInstallCode returned no data');
-  }
-  const token = node.token;
-  if (typeof token !== 'string' || !token) {
-    throw new Error('prmpt: exchangeInstallCode returned no token');
-  }
-  return {
-    token,
-    expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
-    installId: node.publisher?.installId ?? null,
-    solanaWallet: node.publisher?.solanaWallet ?? null,
-  };
-}
-
-/**
  * Ask for a one-time SIWE challenge over an EVM address.
  *
  * Anonymous, like its Solana counterpart: minting a challenge proves nothing.
@@ -306,8 +249,8 @@ export async function createWebSession({ endpoint, token, timeoutMs = 15000 }) {
 /**
  * Ask for a one-time SIWS challenge to sign.
  *
- * Throws like exchangeInstallCode does: every caller is a person running a
- * command and waiting for it, so a failure has to be legible.
+ * Throws because every caller is a person running a command and waiting for
+ * it, so a failure has to be legible.
  */
 export async function siwsChallenge({ endpoint, wallet, timeoutMs = 15000 }) {
   const data = await graphql({

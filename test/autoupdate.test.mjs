@@ -40,7 +40,7 @@ function fakeInstall(version = '0.1.0') {
   // auto-update tests failed for a reason that had nothing to do with
   // auto-updating. The real installer untars the whole tree, so this is also
   // the more faithful fixture.
-  for (const rel of ['hooks/turn-end.mjs', 'hooks/link.mjs', 'bin/prmpt.mjs']) {
+  for (const rel of ['hooks/turn-end.mjs', 'bin/prmpt.mjs']) {
     fs.copyFileSync(path.join(PLUGIN_DIR, rel), path.join(dir, rel));
   }
   for (const entry of fs.readdirSync(path.join(PLUGIN_DIR, 'hooks', 'lib'))) {

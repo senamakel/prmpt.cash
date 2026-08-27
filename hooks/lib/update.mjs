@@ -186,7 +186,7 @@ export async function applyUpdate({ root = pluginRoot(), tag, repo, token, plan,
  * for anyone running `prmpt` directly off the install dir.
  */
 function ensureExecutable(root) {
-  for (const rel of ['bin/prmpt.mjs', 'hooks/turn-end.mjs', 'hooks/link.mjs', 'install.sh']) {
+  for (const rel of ['bin/prmpt.mjs', 'hooks/turn-end.mjs', 'install.sh']) {
     const file = path.join(root, rel);
     try {
       if (fs.existsSync(file)) fs.chmodSync(file, 0o755);
