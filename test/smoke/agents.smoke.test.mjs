@@ -26,7 +26,6 @@ import { stubServer } from '../helpers.mjs';
 import {
   HOSTS,
   PLUGIN_DIR,
-  TEST_CODE,
   TEST_TOKEN,
   execTool,
   hostConfigPath,
@@ -164,22 +163,11 @@ test('Claude Code reads the settings file we wrote without complaining', { skip:
 });
 
 test('the installed hook serves an ad through each host\'s own contract', async () => {
-  // The whole product in one test: link the install against a stub backend,
+  // The whole product in one test: install against a stub backend,
   // then invoke the command string the installer recorded, with the payload
   // each host documents, and check a sponsored block comes back on the channel
   // that host actually displays.
   const server = await stubServer((body) => {
-    if (/ExchangeInstallCode/.test(body?.query ?? '')) {
-      return {
-        data: {
-          exchangeInstallCode: {
-            token: TEST_TOKEN,
-            expiresAt: '2099-01-01T00:00:00Z',
-            publisher: { installId: 'inst_smoke', solanaWallet: 'So11111111111111111111111111111111111111112' },
-          },
-        },
-      };
-    }
     return {
       data: {
         serveAd: {
@@ -195,7 +183,6 @@ test('the installed hook serves an ad through each host\'s own contract', async 
   try {
     const box = sandbox();
     const res = await install(box, [
-      '--code', TEST_CODE,
       '--endpoint', server.url,
       '--agents', 'claude,codex,gemini',
       '--dir', box.dirArg,
@@ -248,7 +235,12 @@ test('the installed hook serves an ad through each host\'s own contract', async 
         // PRMPT_OUTPUT is left at auto on purpose: stdout is a pipe here, which
         // is what it is under a real host, and the JSON envelope is what that
         // must produce. Forcing it would test the wrong branch.
-        env: smokeEnv(box.home, { ...c.env, PRMPT_TIMEOUT_MS: '10000' }),
+        env: smokeEnv(box.home, {
+          ...c.env,
+          PRMPT_ENDPOINT: server.url,
+          PRMPT_TIMEOUT_MS: '10000',
+          PRMPT_TOKEN: TEST_TOKEN,
+        }),
         stdin: JSON.stringify(c.payload),
       });
 

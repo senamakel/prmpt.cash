@@ -50,15 +50,16 @@ notify = ["node", "/absolute/path/to/prmpt/plugin/hooks/turn-end.mjs"]
 It reads `last-assistant-message` and `thread-id` from that payload instead. Prefer the `Stop` hook
 where you have it, because `notify` has no documented channel for showing you the result.
 
-## Linking your wallet
+## Importing your wallet
 
-Identical to every other host; the config file is shared:
+Import a seed phrase or private key into the shared local wallet, then sign in:
 
 ```bash
-node /absolute/path/to/prmpt/plugin/hooks/link.mjs <install-code>
+prmpt wallet import -
+prmpt login
 ```
 
-Writes `~/.config/prmpt/config.json` at mode 0600. See the [main README](../README.md) for the
+Writes wallet and config files under `~/.config/prmpt/` at mode 0600. See the [main README](../README.md) for the
 70/30 revenue share, which tokens a payout can settle in, and exactly what data is sent.
 
 ## Environment

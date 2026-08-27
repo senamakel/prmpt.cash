@@ -17,7 +17,6 @@ import test from 'node:test';
 import {
   HOSTS,
   IS_WINDOWS,
-  TEST_CODE,
   TEST_TOKEN,
   hostConfigPath,
   install,
@@ -101,19 +100,8 @@ test('install.ps1 is idempotent and reversible', { skip }, async () => {
   assert.ok(!fs.existsSync(box.dir), 'install dir survived -Uninstall');
 });
 
-test('install.ps1 links an install code and the hook then serves', { skip }, async () => {
+test('install.ps1 wires a hook that serves with a supplied wallet token', { skip }, async () => {
   const server = await stubServer((body) => {
-    if (/ExchangeInstallCode/.test(body?.query ?? '')) {
-      return {
-        data: {
-          exchangeInstallCode: {
-            token: TEST_TOKEN,
-            expiresAt: '2099-01-01T00:00:00Z',
-            publisher: { installId: 'inst_win', solanaWallet: 'So11111111111111111111111111111111111111112' },
-          },
-        },
-      };
-    }
     return {
       data: {
         serveAd: {
@@ -128,7 +116,6 @@ test('install.ps1 links an install code and the hook then serves', { skip }, asy
   try {
     const box = sandbox();
     const res = await installPs1(box, [
-      '-Code', TEST_CODE,
       '-Endpoint', server.url,
       '-Agents', 'codex',
       '-Dir', box.dir,
@@ -138,7 +125,11 @@ test('install.ps1 links an install code and the hook then serves', { skip }, asy
 
     const [entry] = ourEntries(readJSON(hostConfigPath(box, HOSTS[1])), 'Stop');
     const out = await runRecorded(entry.command, {
-      env: smokeEnv(box.home, { PRMPT_TIMEOUT_MS: '10000' }),
+      env: smokeEnv(box.home, {
+        PRMPT_ENDPOINT: server.url,
+        PRMPT_TIMEOUT_MS: '10000',
+        PRMPT_TOKEN: TEST_TOKEN,
+      }),
       stdin: JSON.stringify({
         hook_event_name: 'Stop',
         last_assistant_message:

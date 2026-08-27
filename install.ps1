@@ -7,7 +7,7 @@
 
     1. checks Node >= 18            (the hook is plain ESM, no dependencies)
     2. copies the plugin to a stable directory
-    3. redeems your install code and stores the token
+    3. creates a wallet and signs in with it
     4. wires up every agent it finds, using that agent's own documented hook
 
   Idempotent: run it again to upgrade, re-point, or add an agent. Existing
@@ -24,22 +24,9 @@
   # The default: creates a Solana wallet here and proves it by signature.
   .\install.ps1
 
-.EXAMPLE
-  # Or redeem a dashboard code, keeping the key off this machine entirely.
-  .\install.ps1 -Code K3H9F-2QPRS
-
-.EXAMPLE
-  # Piping from the web cannot take parameters, so pass the code by
-  # environment variable:
-  $env:PRMPT_CODE = "K3H9F-2QPRS"; irm https://prmpt.cash/install.ps1 | iex
-
-.EXAMPLE
-  # Or run it as a scriptblock, which can:
-  & ([scriptblock]::Create((irm https://prmpt.cash/install.ps1))) -Code K3H9F-2QPRS
 #>
 [CmdletBinding()]
 param(
-  [string] $Code     = $env:PRMPT_CODE,
   [switch] $NoLogin,
   [string] $Version  = $env:PRMPT_VERSION,
   [string] $Agents   = $env:PRMPT_AGENTS,
@@ -322,12 +309,7 @@ if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install d
 Write-Host ''
 $cfgFile = Join-Path $Home_ '.config\prmpt\config.json'
 $Cli = Join-Path $Dir 'bin\prmpt.mjs'
-if ($Code) {
-  Write-Host 'Linking this install' -ForegroundColor White
-  $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin $Cli link $Code
-  if ($LASTEXITCODE -ne 0) { Die 'linking failed -- nothing was wired up. Fix the above and re-run.' }
-} elseif (Test-Path $cfgFile) {
+if (Test-Path $cfgFile) {
   Write-Skip 'already linked'
 } elseif ($NoLogin) {
   Write-Warn '-NoLogin: the hook will stay silent until you run'

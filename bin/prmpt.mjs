@@ -4,7 +4,6 @@
 //   prmpt login             create a wallet if needed, sign in, store the token
 //   prmpt status            what this install is, without revealing anything
 //   prmpt wallet ...        new / show / import / export / path
-//   prmpt link <code>       the dashboard route, for a key that stays elsewhere
 //   prmpt logout            forget the token locally
 //
 // This is the loud half of the plugin. The hook is silent by contract; every
@@ -36,8 +35,7 @@ import { loginWithWallet } from '../hooks/lib/login.mjs';
 import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
-import { exchangeInstallCode, createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
-import { normalizeCode, validateCode } from '../hooks/lib/install-code.mjs';
+import { createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
 const err = (s = '') => process.stderr.write(`${s}\n`);
@@ -102,10 +100,6 @@ usage: prmpt <command> [options]
                              this install's existing account. Run automatically
                              in the background by installs created before
                              payouts settled on Base.
-
-  link <code>                The dashboard route: prove the wallet in a browser
-                             and redeem the one-off code it mints. Use this when
-                             the key must never be on this machine.
 
   help                       This text.
 
@@ -536,32 +530,6 @@ async function cmdLinkEvm() {
   }
 }
 
-async function cmdLink(args) {
-  const [raw] = args;
-  if (!raw) throw new UserError('usage: prmpt link <install-code>');
-  const problem = validateCode(raw);
-  if (problem) throw new UserError(`invalid install code -- ${problem}`);
-
-  const endpoint = resolveEndpoint();
-  const result = await exchangeInstallCode({ endpoint, code: normalizeCode(raw) });
-  const installId = result.installId || resolveInstallId();
-  const file = writeConfig({
-    installId,
-    token: result.token,
-    endpoint,
-    solanaWallet: result.solanaWallet ?? undefined,
-    apiKey: undefined,
-  });
-
-  out('prmpt: linked.');
-  out(`  wallet:     ${result.solanaWallet ?? '(not reported)'}`);
-  out(`  install id: ${installId}`);
-  out(`  token:      ${mask(result.token)}  (stored, not shown)`);
-  if (result.expiresAt) out(`  expires:    ${result.expiresAt}`);
-  out(`  endpoint:   ${endpoint}`);
-  out(`  config:     ${file} (0600)`);
-}
-
 async function cmdUpdate(args) {
   const quiet = args.includes('--quiet');
   const dryRun = args.includes('--dry-run');
@@ -625,7 +593,6 @@ export async function run(argv) {
     case 'wallet':     return cmdWallet(args);
     case 'dashboard':
     case 'web':        return cmdDashboard(args);
-    case 'link':       return cmdLink(args);
     case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
     case 'help':
