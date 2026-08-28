@@ -777,11 +777,7 @@ if [ "$ENDPOINT" != "$DEFAULT_ENDPOINT" ]; then
   say "${Y}note${R} endpoint is $ENDPOINT -- export PRMPT_ENDPOINT to match in your shell."
 fi
 
-say "${B}Done.${R} $CONFIGURED agent(s) configured."
-say ""
-say "  Restart your agent, then just work. Most turns match nothing and print"
-say "  nothing. On a match you get one labelled line; a click pays 70% of the"
-say "  clearing price to your wallet in USDC."
+say "  ${G}Installed.${R} $CONFIGURED agent(s) wired up. Restart yours and just work."
 if [ "${STATUSLINE:-0}" = "1" ]; then
   if [ -f "$STATE_FILE" ]; then
     say ""
@@ -802,7 +798,7 @@ else
   say "  ${D}Turn it on:${R}   $NODE_BIN $CLI statusline install"
   say "                  ${D}(or re-run this installer with --statusline)${R}"
 fi
-say ""
+# --------------------------------------------------------------------- step 3
 # Finishing setup on the web is part of installing, not a second command to
 # remember: the payout token and the account links that lift the daily earnings
 # cap both live there, and an install that never gets there earns at a cap it
@@ -816,16 +812,16 @@ say ""
 # Best effort, exactly like the Base link: the token is already on disk and the
 # hooks are already wired, so a failed round trip here must not turn a good
 # install into a bad exit code. The fallback is the command.
+step 3 "Finish setting up"
+say "  The rest is on the web, where it can have a real interface: pick which"
+say "  token you are paid in, and connect a GitHub or X account to lift the"
+say "  daily earnings cap. Your keys never leave this machine -- the browser"
+say "  gets a single-use code, not the wallet."
+say ""
 PRMPT_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json"
 if [ "$NO_ONBOARD" -eq 1 ] || [ ! -f "$PRMPT_CONFIG_FILE" ]; then
-  say "  ${D}Finish setup:${R} $NODE_BIN $CLI onboard"
-  say "                  Connect a GitHub or X account to lift the daily earnings"
-  say "                  cap, and pick which token you are paid in."
+  say "  ${D}Open it with:${R}  $NODE_BIN $CLI onboard"
 else
-  say "${B}Finishing setup on the web${R}"
-  say "  ${D}Connect a GitHub or X account to lift the daily earnings cap, and"
-  say "  pick which token you are paid in.${R}"
-  say ""
   # No terminal means nobody is sitting here to see a browser window, and an
   # unattended install must not pop one. The link is printed either way.
   if [ -t 1 ]; then _onboard_open=""; else _onboard_open="--no-open"; fi
