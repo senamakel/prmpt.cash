@@ -484,7 +484,10 @@ else
   # the hook enrols itself in the background on a later turn anyway. Wiring up
   # the agents is the part that has to happen while the installer is running.
   say "${B}Creating a wallet and signing in${R}"
-  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" login; then
+  # --no-onboard: the setup link is minted at the very END of this run instead.
+  # The code lives two minutes, and there are still agents to wire and a
+  # screenful of output to print between here and the user reading anything.
+  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" login --no-onboard; then
     :
   else
     warn "sign-in failed -- the agents are still being wired up."
@@ -709,20 +712,18 @@ install_editor_ext() {
 }
 
 offer_editor_ext() {
-  _bin="$1"; _name="$2"
+  _bin="$1"; _name="$2"; _want="$3"
   command -v "$_bin" >/dev/null 2>&1 || return 0
-  if [ "${EDITOR_EXT:-}" = "1" ]; then
+  if [ "$_want" = "1" ]; then
     install_editor_ext "$_bin" "$_name" \
       || warn "$_name found but the extension could not be installed."
-  else
+  elif [ "$_want" != "0" ]; then
     skip "$_name found -- re-run with --editor to add the sidebar card"
   fi
 }
 
-if [ "${EDITOR_EXT:-}" != "0" ]; then
-  offer_editor_ext cursor Cursor
-  offer_editor_ext code "VS Code"
-fi
+offer_editor_ext cursor Cursor "${EDITOR_CURSOR:-}"
+offer_editor_ext code "VS Code" "${EDITOR_CODE:-}"
 
 # ----------------------------------------------------------------------- done
 say ""
@@ -762,12 +763,36 @@ else
   say "                  ${D}(or re-run this installer with --statusline)${R}"
 fi
 say ""
-# The login above already printed a signed-in link, but that code lives two
-# minutes -- long dead by the time somebody reads this and comes back. So the
-# durable instruction is the command, not the link.
-say "  ${D}Finish setup:${R} $NODE_BIN $CLI onboard"
-say "                  Connect a GitHub or X account to lift the daily earnings"
-say "                  cap, and pick which token you are paid in."
+# Finishing setup on the web is part of installing, not a second command to
+# remember: the payout token and the account links that lift the daily earnings
+# cap both live there, and an install that never gets there earns at a cap it
+# was never told about.
+#
+# It runs HERE, last, rather than inside `login`, because the code is single-use
+# and expires in two minutes -- minted before the agents were wired it would be
+# dead on arrival. It runs on a re-install too, where there is no login step at
+# all and the old code path printed nothing.
+#
+# Best effort, exactly like the Base link: the token is already on disk and the
+# hooks are already wired, so a failed round trip here must not turn a good
+# install into a bad exit code. The fallback is the command.
+PRMPT_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/config.json"
+if [ "$NO_ONBOARD" -eq 1 ] || [ ! -f "$PRMPT_CONFIG_FILE" ]; then
+  say "  ${D}Finish setup:${R} $NODE_BIN $CLI onboard"
+  say "                  Connect a GitHub or X account to lift the daily earnings"
+  say "                  cap, and pick which token you are paid in."
+else
+  say "${B}Finishing setup on the web${R}"
+  say "  ${D}Connect a GitHub or X account to lift the daily earnings cap, and"
+  say "  pick which token you are paid in.${R}"
+  say ""
+  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" onboard; then
+    :
+  else
+    warn "could not open the setup page. Run it yourself when you are ready:"
+    warn "  $NODE_BIN $CLI onboard"
+  fi
+fi
 say ""
 say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
 if [ -f "$INSTALL_DIR/install.sh" ]; then
