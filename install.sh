@@ -108,6 +108,12 @@ if [ -z "$INSTALL_DIR" ]; then
   INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
 
+# Where the status line the user already had is recorded, so it can be run by
+# ours and handed back on uninstall. Deliberately NOT config.json: that file is
+# rewritten by every code path that touches settings, and losing somebody's
+# footer to an unrelated write would be a poor trade.
+STATE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/statusline.json"
+
 # --------------------------------------------------------------- prerequisites
 command -v node >/dev/null 2>&1 || die "Node.js 18+ is required and was not found on PATH."
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
@@ -123,8 +129,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
-    if PRMPT_CFG="$f" "$NODE_BIN" -e '
-      const fs=require("fs"), p=process.env.PRMPT_CFG;
+    if PRMPT_CFG="$f" PRMPT_STATE="$STATE_FILE" "$NODE_BIN" -e '
+      const fs=require("fs"), p=process.env.PRMPT_CFG, state=process.env.PRMPT_STATE;
+      const OURS=["turn-end.mjs","prompt-start.mjs"];
       let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
@@ -133,13 +140,24 @@ if [ "$UNINSTALL" -eq 1 ]; then
         for (const g of groups) {
           if (!Array.isArray(g.hooks)) continue;
           const before=g.hooks.length;
-          g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && h.command.includes("turn-end.mjs")));
+          g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && OURS.some(n=>h.command.includes(n))));
           if (g.hooks.length!==before) hit=true;
         }
         j.hooks[ev]=groups.filter(g=>Array.isArray(g.hooks) ? g.hooks.length>0 : true);
         if (j.hooks[ev].length===0) delete j.hooks[ev];
       }
       if (j.hooks && Object.keys(j.hooks).length===0) delete j.hooks;
+      // Give the status line back. Whatever was there before we arrived was
+      // recorded at install time; without this the user is left with a footer
+      // that runs a script we just deleted.
+      const sl=j.statusLine;
+      if (sl && typeof sl.command==="string" && sl.command.includes("status-line.mjs")) {
+        let wrapped="";
+        try { wrapped=JSON.parse(fs.readFileSync(state,"utf8")).wrapped||""; } catch {}
+        if (wrapped) j.statusLine={...sl, type:"command", command:wrapped}; else delete j.statusLine;
+        try { fs.rmSync(state,{force:true}); } catch {}
+        hit=true;
+      }
       if (!hit) process.exit(2);
       fs.copyFileSync(p, p+".bak");
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
