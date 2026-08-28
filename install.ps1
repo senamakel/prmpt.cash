@@ -604,7 +604,9 @@ if ($NoOnboard -or -not (Test-Path $cfgFile)) {
   Write-Host '  pick which token you are paid in.' 
   Write-Host ''
   $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin $Cli onboard
+  # No console means nobody is here to see a browser window; the link is
+  # printed either way.
+  if ($interactive) { & $NodeBin $Cli onboard } else { & $NodeBin $Cli onboard --no-open }
   if ($LASTEXITCODE -ne 0) {
     Write-Warn 'could not open the setup page. Run it yourself when you are ready:'
     Write-Warn "  node $Cli onboard"
