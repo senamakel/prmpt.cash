@@ -56,6 +56,8 @@ ${B}prmpt.cash installer${R}
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
   --project            Configure ./ (this project) instead of your home directory
+  --editor             Also install the VS Code / Cursor extension, if one of
+                       them is on your PATH (--no-editor to skip the offer)
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
@@ -84,6 +86,8 @@ while [ $# -gt 0 ]; do
     --version=*) VERSION="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
     --agents=*)  AGENTS="${1#*=}"; shift ;;
+    --editor)    EDITOR_EXT=1; shift ;;
+    --no-editor) EDITOR_EXT=0; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
@@ -112,7 +116,12 @@ fi
 # ours and handed back on uninstall. Deliberately NOT config.json: that file is
 # rewritten by every code path that touches settings, and losing somebody's
 # footer to an unrelated write would be a poor trade.
-STATE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/statusline.json"
+#
+# The same file, in the same shape, as the one hooks/lib/statusline-install.mjs
+# writes for 'prmpt statusline install'. There are two ways to wire this surface
+# up and one renderer reading the result, so a second format would mean an
+# install done one way could not be undone the other.
+STATE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/statusline-chain-claude.json"
 
 # --------------------------------------------------------------- prerequisites
 command -v node >/dev/null 2>&1 || die "Node.js 18+ is required and was not found on PATH."
@@ -150,11 +159,19 @@ if [ "$UNINSTALL" -eq 1 ]; then
       // Give the status line back. Whatever was there before we arrived was
       // recorded at install time; without this the user is left with a footer
       // that runs a script we just deleted.
+      // Ours, told apart from anybody else by the DIRECTORY as well as the
+      // name. A bare "statusline.mjs" also matches a their-statusline.mjs that
+      // somebody wrote themselves, and mistaking theirs for ours means either
+      // deleting it or forking a copy of the renderer on every render.
+      const MINE=/hooks[\/\\]statusline\.mjs/;
       const sl=j.statusLine;
-      if (sl && typeof sl.command==="string" && sl.command.includes("status-line.mjs")) {
-        let wrapped="";
-        try { wrapped=JSON.parse(fs.readFileSync(state,"utf8")).wrapped||""; } catch {}
-        if (wrapped) j.statusLine={...sl, type:"command", command:wrapped}; else delete j.statusLine;
+      if (sl && typeof sl.command==="string" && MINE.test(sl.command)) {
+        // Their whole setting goes back, not just the command: padding and any
+        // other key they set were theirs, and restoring the command into OUR
+        // object would hand them a merge of the two.
+        let chain=null;
+        try { const c=JSON.parse(fs.readFileSync(state,"utf8")); if (c && typeof c==="object") chain=c; } catch {}
+        if (chain) j.statusLine=chain; else delete j.statusLine;
         try { fs.rmSync(state,{force:true}); } catch {}
         hit=true;
       }
@@ -304,7 +321,7 @@ HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 # The status-line surface: one hook to fetch a decision when the user presses
 # enter, and one command to render it in the footer while the model works.
 PROMPT_HOOK="$HOOK_DIR/hooks/prompt-start.mjs"
-STATUS_HOOK="$HOOK_DIR/hooks/status-line.mjs"
+STATUS_HOOK="$HOOK_DIR/hooks/statusline.mjs"
 
 # ------------------------------------------------------------------------ link
 CLI="$INSTALL_DIR/bin/prmpt.mjs"
@@ -424,9 +441,11 @@ merge_statusline() {
     // Record theirs so our renderer can run it and uninstall can hand it back.
     // Never record OUR OWN command: a re-install would otherwise make every
     // render fork a fresh copy of the renderer, forever.
-    if (prevCmd && !prevCmd.includes("status-line.mjs")) {
+    // Ours, told apart from anybody else by the DIRECTORY as well as the
+    // name -- see the uninstall program above.
+    if (prevCmd && !/hooks[\/\\]statusline\.mjs/.test(prevCmd)) {
       fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
-      fs.writeFileSync(state, JSON.stringify({ wrapped: prevCmd }, null, 2)+"\n", { mode:0o600 });
+      fs.writeFileSync(state, JSON.stringify(prev, null, 2)+"\n", { mode:0o600 });
       fs.chmodSync(state, 0o600);
     }
     // Their other statusLine keys (padding and friends) are display preferences
@@ -496,6 +515,55 @@ if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || 
   fi
 else skip "Amp not found"; fi
 
+# ------------------------------------------------------------ editor extension
+# The extension is a DISPLAY for what the hook already matched -- it is what
+# gives Cursor somewhere to put an ad at all, since a Cursor hook can read a
+# turn but has nowhere to show the result. Offered, never forced: it is a
+# separate artifact with its own uninstall, and an installer that silently adds
+# things to somebody's editor is not one people should pipe into sh.
+install_editor_ext() {
+  _bin="$1"; _name="$2"
+
+  # A checkout or an unpacked release may carry the built vsix beside it; a
+  # normal install downloads it from the same release as the tarball, so the
+  # two can never be from different versions.
+  _vsix=""
+  for _cand in "$INSTALL_DIR"/vscode/prmpt-vscode-*.vsix "$INSTALL_DIR"/vscode/*.vsix; do
+    [ -f "$_cand" ] && { _vsix="$_cand"; break; }
+  done
+
+  if [ -z "$_vsix" ]; then
+    _ver=$(node -p "require('$INSTALL_DIR/package.json').version" 2>/dev/null) || return 1
+    [ -n "$_ver" ] || return 1
+    _tmp=$(mktemp -d)
+    _vsix="$_tmp/prmpt-vscode-$_ver.vsix"
+    _url="https://github.com/$REPO_SLUG/releases/download/v$_ver/prmpt-vscode-$_ver.vsix"
+    curl -fsSL "$_url" -o "$_vsix" 2>/dev/null || { rm -rf "$_tmp"; return 1; }
+  fi
+
+  if "$_bin" --install-extension "$_vsix" --force >/dev/null 2>&1; then
+    ok "$_name extension installed  ${D}(reload the window)${R}"
+    return 0
+  fi
+  return 1
+}
+
+offer_editor_ext() {
+  _bin="$1"; _name="$2"
+  command -v "$_bin" >/dev/null 2>&1 || return 0
+  if [ "${EDITOR_EXT:-}" = "1" ]; then
+    install_editor_ext "$_bin" "$_name" \
+      || warn "$_name found but the extension could not be installed."
+  else
+    skip "$_name found -- re-run with --editor to add the sidebar card"
+  fi
+}
+
+if [ "${EDITOR_EXT:-}" != "0" ]; then
+  offer_editor_ext cursor Cursor
+  offer_editor_ext code "VS Code"
+fi
+
 # ----------------------------------------------------------------------- done
 say ""
 if [ "$CONFIGURED" -eq 0 ]; then
@@ -518,6 +586,13 @@ if [ -f "$STATE_FILE" ]; then
   say "  ${D}Your status line still runs; ours is appended after it, and"
   say "  --uninstall gives yours back exactly as it was.${R}"
 fi
+say ""
+# The login above already printed a signed-in link, but that code lives two
+# minutes -- long dead by the time somebody reads this and comes back. So the
+# durable instruction is the command, not the link.
+say "  ${D}Finish setup:${R} $NODE_BIN $CLI onboard"
+say "                  Connect a GitHub or X account to lift the daily earnings"
+say "                  cap, and pick which token you are paid in."
 say ""
 say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
 if [ -f "$INSTALL_DIR/install.sh" ]; then

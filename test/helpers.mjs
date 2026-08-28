@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const PLUGIN_DIR = path.resolve(here, '..');
 export const TURN_END = path.join(PLUGIN_DIR, 'hooks', 'turn-end.mjs');
 export const PROMPT_START = path.join(PLUGIN_DIR, 'hooks', 'prompt-start.mjs');
-export const STATUS_LINE = path.join(PLUGIN_DIR, 'hooks', 'status-line.mjs');
+export const STATUS_LINE = path.join(PLUGIN_DIR, 'hooks', 'statusline.mjs');
 
 /** The token used everywhere, so one assertion can prove it never leaks. */
 export const TEST_TOKEN = 'eyJ.test.SECRET_TOKEN_MUST_NEVER_BE_PRINTED';

@@ -1,7 +1,7 @@
 {
   "name": "prmpt",
   "version": "0.1.0",
-  "description": "Get paid for the coding-agent turns you already run. Prints one clearly-labelled sponsored line when a turn genuinely matches an advertiser, and pays you 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana.",
+  "description": "Earn free crypto for the replies your coding agent already writes. Prints one clearly-labelled sponsored line when a reply actually matches an advertiser, and clicking it pays you: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
   "author": {
     "name": "prmpt.cash",
     "url": "https://prmpt.cash"

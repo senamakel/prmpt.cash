@@ -1,0 +1,96 @@
+{
+  "name": "prmpt",
+  "displayName": "prmpt",
+  "description": "Shows the sponsored line prmpt matched for your last agent turn, and pays you 70% of the click price.",
+  "version": "0.2.0",
+  "license": "MIT",
+  "publisher": "prmpt",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/senamakel/prmpt.cash.git"
+  },
+  "homepage": "https://prmpt.cash",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "prmpt",
+      "properties": {
+        "prmpt.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the current sponsored line in the status bar."
+        },
+        "prmpt.cursorChatCard": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "on",
+            "off"
+          ],
+          "default": "ask",
+          "description": "Show the card above Cursor's chat input. This requires patching Cursor's own workbench.js, so 'ask' prompts once before doing anything."
+        },
+        "prmpt.bridgePort": {
+          "type": "number",
+          "default": 51793,
+          "description": "Localhost port the extension serves the parked ad on, for the Cursor chat card to read. Changing it needs the chat patch re-applied."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "prmpt.adCard",
+          "name": "Sponsored",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "prmpt.openCurrentAd",
+        "title": "prmpt: Open Current Sponsor"
+      },
+      {
+        "command": "prmpt.applyCursorPatch",
+        "title": "prmpt: Apply Cursor Chat Card"
+      },
+      {
+        "command": "prmpt.removeCursorPatch",
+        "title": "prmpt: Remove Cursor Chat Card"
+      },
+      {
+        "command": "prmpt.showStatus",
+        "title": "prmpt: Show Status"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test": "node --test test/*.test.mjs",
+    "package": "npm run build && vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

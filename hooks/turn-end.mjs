@@ -20,6 +20,7 @@ import { enrolInBackground } from './lib/enrol.mjs';
 import { flushImpressionsInBackground } from './lib/background.mjs';
 import { linkEvmInBackground } from './lib/link-evm.mjs';
 import { autoUpdateInBackground } from './lib/autoupdate.mjs';
+import { FILLER_TURN_END, writeSlot } from './lib/slot.mjs';
 
 /** Below this many characters a turn carries no usable signal. */
 const MIN_TURN_CHARS = 80;
@@ -305,6 +306,8 @@ function main() {
 
     const { repoLanguage, fileTypes } = detectRepo(config.cwd);
 
+    const harness = detectHarness(payload);
+
     const ad = await serveAd(config, {
       installId: config.installId,
       sessionId: config.sessionId,
@@ -314,11 +317,20 @@ function main() {
       turnText,
       repoLanguage,
       fileTypes,
-      harness: detectHarness(payload),
+      harness,
       harnessVersion: harnessVersion || undefined,
       model: model || undefined,
     });
     if (!ad) return quiet();
+
+    // Park the decision for the status line, which renders it while the user
+    // reads this turn and types the next prompt. Best effort and non-blocking
+    // on failure: a status line that shows nothing is a missed impression, and
+    // a turn that breaks over a failed write is a bug.
+    //
+    // Tagged as the turn-end filler, which is what stops it being billed a
+    // second time: this ad was served and billed by the request three lines up.
+    writeSlot(ad, { sessionId: config.sessionId, harness, filler: FILLER_TURN_END });
 
     const lines = renderLines(ad);
 

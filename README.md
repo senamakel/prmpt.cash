@@ -1,11 +1,11 @@
 # prmpt.cash
 
-**Get paid for the coding-agent turns you already run.**
+**Earn free crypto for the replies your coding agent already writes.**
 
-When your agent finishes a reply, this hook asks whether any advertiser genuinely
-matches what you just did. Almost always the answer is no and nothing prints. On a
-match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
-price lands in your wallet**, usually within a second, in whichever token you
+When your agent finishes a reply, this hook asks whether any advertiser actually
+matches what you just did. Almost always the answer is no and nothing prints. Once
+in a while it is yes, and you get one clearly-labelled line. **Click it and you get
+paid**, straight to your wallet, usually within a second, in whichever token you
 picked.
 
 In Claude Code there is a second place it can appear: a short segment appended to
@@ -18,12 +18,12 @@ paying for the moment a real problem is on your screen, and this is your share o
 
 | Token   | Chain  | What it is                                                  |
 | ------- | ------ | ----------------------------------------------------------- |
-| `TINY`  | Solana | Tiny Humans. The one most people take: stacked passively out of ad revenue, at no cost to you |
-| `cbBTC` | Base   | Bitcoin, one to one                                         |
+| `TINY`  | Solana | Tiny Humans. The most memeable mascot on the list, with an active community behind it |
+| `BTC`   | Base   | Bitcoin, one to one. Coinbase Wrapped BTC (`cbBTC`) on chain |
 | `ETH`   | Base   | Native ether                                                |
 | `SOL`   | Solana | Native lamports, no token account in the way                |
-| `USDC`  | Base   | A dollar that stays a dollar. The default                   |
-| `XAUt0` | Solana | Tether Gold, if you would rather your terminal habit bought bullion |
+| `USDC`  | Base   | A dollar that stays a dollar. The default, and the stable answer |
+| `XAUT`  | Solana | Tether Gold, if you would rather your terminal habit bought bullion. `XAUt0` on chain |
 
 Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
 converted only when a payout settles, at the price right then, so switching changes
@@ -111,7 +111,7 @@ proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
 
 Which address gets paid follows from the token you choose: ERC-20s settle on
-Base, and SOL, TINY and XAUt0 on Solana. You choose on the dashboard.
+Base, and SOL, TINY and XAUT on Solana. You choose on the dashboard.
 
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
@@ -223,29 +223,60 @@ Being honest about what that does and does not guarantee:
 | Surface | When | Where | Hosts |
 |---|---|---|---|
 | End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp |
-| Status line | while the model is working | one segment appended to your footer | **Claude Code only** |
+| Status line | while the model is working | one dim row above your prompt | **Claude Code only** |
 
 **The status line is Claude Code only, on purpose.** Codex and Gemini CLI have no
 equivalent footer, and inventing config for them would wire up something that
 could never display anything. Cursor and Windsurf are absent for the same
-reason they always were.
+reason they always were. (Codex's `[tui] status_line` accepts identifiers from a
+fixed list of built-in items and cannot run a command — see
+[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
+otherwise unaffected: its `Stop` hook still matches your turns, still prints the
+end-of-turn line, and still parks a slot the editor extension can render.)
+
+### The status line has two fillers
+
+They write the same file, `~/.config/prmpt/slot.json`, and whichever wrote last
+is what you see. They are not the same thing, and the difference is what you are
+charged in privacy for:
+
+- **The parked ad.** When a turn ends and matches, that decision is *already*
+  served and already paid for. It is parked, and the status line keeps showing
+  it while you read the answer and type the next prompt, until it ages out after
+  30 minutes. **This sends nothing new** — the request already happened — and it
+  earns you nothing new either: it is the same impression, still on screen.
+- **The prompt-fetched ad.** When you press enter, a detached child asks for a
+  decision matched to *this* prompt and parks that instead. It is fresher, it is
+  its own impression on its own surface, and it is billed once — the first time
+  it is actually drawn. This is the path that sends keywords derived from your
+  prompt; see [What is sent](#what-is-sent), which does not soften it.
+
+A fetch that misses, or does not come back in time, writes nothing at all, so
+the parked ad is still there and the row does not go blank.
 
 **It wraps the status line you already have.** If `statusLine` in
 `~/.claude/settings.json` already points at a command, the installer records it
-and ours runs it, keeps its output, and appends a segment after it. Your command
-is handed the same JSON on stdin that Claude Code would have given it. If there
-is not enough room left on the line, yours wins and nothing of ours is drawn.
-`--uninstall` gives your original command back.
+and ours runs it, keeps its output above ours, and puts our row closest to the
+prompt. Your command is handed the same JSON on stdin that Claude Code would
+have given it. On a host that renders only one row, yours wins and nothing of
+ours is drawn. `--uninstall`, and `prmpt statusline uninstall`, give your
+original command back exactly as it was.
 
-Two consequences worth knowing:
+Three more things worth knowing:
 
 - The renderer **makes no network call, ever.** Claude Code re-runs a status-line
-  command continuously and watches it for slowness. The decision is fetched by a
-  detached child at the start of the turn and left in a small file; the renderer
-  reads that file and prints one line.
+  command continuously and watches it for slowness. Both fillers write a small
+  file from somewhere else; the renderer reads that file and prints one row.
+- **Claude Code hides most of its footer key hints while a custom status line is
+  set** — including `esc to interrupt`. That is Claude Code's behaviour, not
+  ours. Removing the status line brings them back.
 - The `/plugin install` route wires the hooks but **not** the status line.
   `statusLine` is a settings key rather than a hook, and a Claude Code plugin can
-  only declare hooks, so the footer needs `install.sh` or `install.ps1`.
+  only declare hooks, so the footer needs `install.sh`, `install.ps1`, or:
+
+```sh
+$ prmpt statusline install     # also: status, preview, uninstall
+```
 
 ## What it looks like
 
@@ -255,21 +286,23 @@ Quarantine detects flaky tests from your CI history and isolates them
 https://prmpt.cash/7q
 ```
 
-and, in the status line, appended to whatever you already had:
+and, in the status line, one dim row directly above your prompt, beneath
+whatever status line you already had:
 
 ```
-my-repo (main) Opus | 41% left  Sponsored · Quarantine flaky tests
+my-repo (main) Opus | 41% left
+Sponsored · Quarantine flaky tests — detects flakes from CI history ↗
 ```
 
 The click URL is attached as a terminal hyperlink rather than printed, so the
-line stays short; it is clickable in iTerm2, Kitty and WezTerm and is plain text
+row stays short; it is clickable in iTerm2, Kitty and WezTerm and is plain text
 everywhere else.
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
 redirect: it records the click, pays you in your chosen token, and 302s to the
 advertiser. Every payout is a real on-chain transaction, listed with its
 signature at <https://prmpt.cash/earnings> and counted on the public
-[transparency page](https://prmpt.cash/transparency).
+[analytics page](https://prmpt.cash/analytics).
 
 ## It cannot break your session
 
@@ -278,7 +311,7 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
 - **One request, hard 1.5s budget, fail-open.** On any error, timeout, non-match
   or missing key it prints nothing and exits 0.
 - Gemini CLI runs hooks *synchronously inside the agent loop*, so a slow hook
-  would stall your turn. That is exactly why the budget exists.
+  would stall your agent. That is exactly why the budget exists.
 - **Signing in is never on the turn's clock.** Self-enrolment detaches a child
   and returns immediately; the turn that triggers it serves nothing and takes
   about as long as an exit.
@@ -304,9 +337,13 @@ export PRMPT_DISABLED=1
 session id, an install id derived from your machine, and the agent name. That is
 what the match runs against.
 
-**For the status line:** there is no reply yet — the ad renders while the model
-is still working — so the match runs against a handful of keywords derived from
-your prompt **on your machine**, by
+**For the parked ad on the status line: nothing at all.** It is the decision the
+end-of-turn request already returned, re-displayed from a local file. No second
+request is made and no new data leaves the machine.
+
+**For the prompt-fetched ad on the status line:** there is no reply yet — the ad
+renders while the model is still working — so the match runs against a handful of
+keywords derived from your prompt **on your machine**, by
 [`hooks/lib/tokens.mjs`](hooks/lib/tokens.mjs). What is transmitted is that list
 and nothing else.
 
@@ -328,7 +365,8 @@ nowhere in the request body.
 That is a real reduction, not anonymity: individual words you typed do leave the
 machine. If that is not a trade you want, `PRMPT_DISABLED=1` turns everything
 off, and removing the `UserPromptSubmit` entry from `~/.claude/settings.json`
-turns off only this surface, leaving the end-of-turn line working.
+turns off only the prompt-fetched path, leaving the end-of-turn line — and the
+parked ad on the status line, which sends nothing — working.
 
 See [`.env.example`](.env.example) for every knob.
 
@@ -342,15 +380,20 @@ See [`.env.example`](.env.example) for every knob.
 | Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
 | Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
 | Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
+| Cursor | `afterAgentResponse` | plus the editor extension for display. See [`vscode/`](vscode/README.md) |
 
 Those units and event names are not interchangeable; the installer handles each
 correctly. Per-host detail lives in [`codex/`](codex/README.md),
 [`gemini/`](gemini/README.md) and [`amp/`](amp/README.md).
 
-**Cursor and Windsurf are deliberately absent.** Both can hand a hook the
-finished turn, but neither documents a way for that hook to show you anything.
-An ad could be matched and never displayed, and you would earn nothing from
-it. We would rather leave them out than take the impression.
+**Windsurf is deliberately absent.** It can hand a hook the finished turn, but
+documents no way for that hook to show you anything. An ad could be matched and
+never displayed, and you would earn nothing from it. We would rather leave it
+out than take the impression.
+
+**Cursor needs the editor extension.** Same problem — the hook sees the turn and
+has nowhere to put the result — solved by giving it somewhere: see
+[`vscode/`](vscode/README.md).
 
 **The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
 `install.sh` step for step and delegates every JSON edit to the same Node

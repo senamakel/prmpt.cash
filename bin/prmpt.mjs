@@ -36,6 +36,15 @@ import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
 import { createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
+import {
+  installClaude,
+  uninstallClaude,
+  statusAll,
+  detectHosts,
+  CLAUDE_TRADE_OFF,
+} from '../hooks/lib/statusline-install.mjs';
+import { readSlot, clearSlot } from '../hooks/lib/slot.mjs';
+import { composeStatusLine } from '../hooks/lib/statusline-render.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
 const err = (s = '') => process.stderr.write(`${s}\n`);
@@ -76,6 +85,10 @@ usage: prmpt <command> [options]
                              Your keys stay here; the browser gets a two-minute
                              single-use code. Everything configurable -- payout
                              token, earnings, history -- lives there.
+  onboard                    Open the onboarding page: how this works, connect a
+                             GitHub or X account to lift the daily earnings cap,
+                             and pick which token you are paid in. Run it again
+                             any time -- the link from 'login' expires quickly.
 
   wallet                     Show both addresses (same as 'wallet show').
   wallet new [--force]       Generate a fresh seed phrase and both wallets.
@@ -89,6 +102,13 @@ usage: prmpt <command> [options]
   wallet export [--json]     Print the Solana secret key. Only to back it up --
                              prefer 'wallet mnemonic', which covers both chains.
   wallet path                Where the key files live.
+
+  statusline install         Also show the matched ad on Claude Code's status
+                             line, above the prompt, until it ages out. Opt-in:
+                             it edits ~/.claude/settings.json, chaining any
+                             status line you already had. Note that Claude Code
+                             hides its footer key hints while one is set.
+                             Also: uninstall, status, preview.
 
   update [--check]           Update this install to the latest GitHub release.
                              --check reports without changing anything;
@@ -115,8 +135,8 @@ ${RELEASE_REPO} for a newer release and, if there is one, verifies its
 checksum and swaps this directory for it. Your token and wallet key live in
 ~/.config/prmpt and are never touched by that.
 
-One seed phrase holds both chains: a Solana address (SOL, TINY, XAUt0) and a
-Base address (USDC, cbBTC, ETH). Which one is paid follows from the token you
+One seed phrase holds both chains: a Solana address (SOL, TINY, XAUT) and a
+Base address (USDC, BTC, ETH). Which one is paid follows from the token you
 choose on the dashboard.
 
 It is a hot wallet: a cleartext key at mode 0600 under your home directory. It
@@ -167,17 +187,61 @@ async function cmdLogin(args) {
   // default token is not one of them.
   if (!result.evmLinked) {
     err(`prmpt: warning -- could not link the Base address: ${result.evmError}`);
-    err('  Solana payouts (SOL, TINY, XAUt0) still work. ERC-20 earnings will');
+    err('  Solana payouts (SOL, TINY, XAUT) still work. ERC-20 earnings will');
     err("  accrue but cannot be sent until this succeeds. Re-run 'prmpt login'.");
     err('');
   }
 
-  out('Clicks on ads served from this install now pay 70% of the clearing price');
-  out('to your wallet, in whichever token you choose. Change it, and see what you');
-  out("have earned, with 'prmpt dashboard'. Set PRMPT_DISABLED=1 to stop serving.");
+  out('Clicks on ads served from this install now pay you, straight to your');
+  out('wallet, in whichever token you choose. Set PRMPT_DISABLED=1 to stop');
+  out('serving.');
   out('');
   out('The token cannot be revoked from here or anywhere else -- it is valid until');
   out('it expires. Treat the config file as a credential.');
+  out('');
+
+  await handOffToOnboarding({ endpoint, token: result.token, open: !args.includes('--no-open') });
+}
+
+/**
+ * Print, and open, the link that finishes setup on the web.
+ *
+ * The split is the same one `prmpt dashboard` exists for: the plugin holds
+ * keys, and everything a person might want to CHOOSE -- which token they are
+ * paid in, which accounts vouch for them -- lives on the web where it can have
+ * a real interface.
+ *
+ * This is BEST EFFORT and never throws. Signing in has already succeeded by
+ * the time it runs, the token is already on disk, and a transient failure on a
+ * second round trip must not turn a good login into a non-zero exit -- the same
+ * rule the Base link follows. When it fails, the fallback is a command the
+ * user can run themselves, which is also what they need when the two-minute
+ * code expires before they get to it.
+ */
+async function handOffToOnboarding({ endpoint, token, open }) {
+  let url;
+  try {
+    const session = await createWebSession({ endpoint, token });
+    url = webSessionURL(session.url, '/onboarding');
+  } catch {
+    out('Finish setting up -- connect a GitHub or X account to lift the daily');
+    out("earnings cap, and pick your payout token -- with 'prmpt onboard'.");
+    return;
+  }
+
+  out('One more step. This link opens your account on the web, already signed');
+  out('in, where you can connect a GitHub or X account to lift the daily');
+  out('earnings cap and choose which token you are paid in:');
+  out('');
+  out(`  ${url}`);
+  out('');
+  out("It is single use and expires in two minutes. For a fresh one: prmpt onboard");
+
+  if (!open) return;
+  if (!openInBrowser(url)) {
+    out('');
+    out('Could not open a browser here. Paste the link above into one.');
+  }
 }
 
 function cmdStatus() {
@@ -416,6 +480,31 @@ function safeLoadWallet() {
  * move and is not exposed to the page.
  */
 async function cmdDashboard(args) {
+  return openWebSession(args, { opening: 'the dashboard' });
+}
+
+/**
+ * Open the onboarding page signed in as this install.
+ *
+ * Identical machinery to `dashboard`, different destination. It exists as its
+ * own command because the code lives two minutes: the link printed at the end
+ * of `prmpt login` is dead by the time somebody comes back to their terminal
+ * after lunch, and "run this to get a fresh one" has to be a thing they can
+ * actually run.
+ */
+async function cmdOnboard(args) {
+  return openWebSession(args, { next: '/onboarding', opening: 'onboarding' });
+}
+
+/**
+ * Mint a single-use code from the stored token and open the browser at it.
+ *
+ * `next` names a path on the site, never a full URL -- it is passed through the
+ * sign-in page, which validates it against its own allowlist before
+ * redirecting. Building an absolute URL here would put the destination outside
+ * anything the server checks.
+ */
+async function openWebSession(args, { next = '', opening = 'the dashboard' } = {}) {
   const stored = readStoredConfig();
   const envToken = (process.env.PRMPT_TOKEN || process.env.PRMPT_API_KEY || '').trim();
   const token = envToken || (typeof stored.token === 'string' ? stored.token.trim() : '');
@@ -425,19 +514,33 @@ async function cmdDashboard(args) {
 
   const endpoint = resolveEndpoint();
   const session = await createWebSession({ endpoint, token });
+  const url = webSessionURL(session.url, next);
 
-  out('prmpt: opening the dashboard.');
+  out(`prmpt: opening ${opening}.`);
   out('');
-  out(`  ${session.url}`);
+  out(`  ${url}`);
   out('');
   out('That link signs in as this install. It is single use and expires in two');
   out('minutes -- treat it like a password until you have opened it.');
 
   if (args.includes('--no-open')) return;
-  if (!openInBrowser(session.url)) {
+  if (!openInBrowser(url)) {
     out('');
     out('Could not open a browser here. Paste the link above into one.');
   }
+}
+
+/**
+ * Append a `next` path to a web session URL.
+ *
+ * Exported for the tests. The encoding matters: an unencoded path with a query
+ * string of its own would terminate this one early and the destination would
+ * be silently truncated.
+ */
+export function webSessionURL(base, next) {
+  if (!next) return base;
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}next=${encodeURIComponent(next)}`;
 }
 
 /**
@@ -581,6 +684,82 @@ async function cmdUpdate(args) {
   say('  Restart your agent to pick it up.');
 }
 
+
+// --- statusline -------------------------------------------------------------
+
+/**
+ * The status line is a second surface for an ad the plugin has ALREADY matched.
+ * The turn hook parks its decision; the host re-renders it above the prompt
+ * until it ages out. No extra request, no extra latency, and the copy on screen
+ * still belongs to the turn the user is looking at.
+ *
+ * Opt-in rather than installed by default: it edits the user's own Claude Code
+ * and Codex config, and a plugin that rewrites those uninvited is a plugin
+ * nobody should install.
+ */
+async function cmdStatusline(args) {
+  const sub = args[0] || 'status';
+
+  if (sub === 'install') {
+    if (!detectHosts().length && !args.includes('--force')) {
+      throw new UserError(
+        'Claude Code not found on this machine.\n' +
+        "  Looked for ~/.claude. Pass --force to write the setting anyway.",
+      );
+    }
+    for (const line of CLAUDE_TRADE_OFF) out(`  ${line}`);
+    out('');
+    const r = installClaude();
+    out(`prmpt: status line installed -- ${r.path}`);
+    if (r.chained) out('  your existing status line is kept and rendered above it');
+    out('');
+    out('Restart Claude Code to pick it up. Nothing shows until a turn actually');
+    out('matches an ad: the status line renders that decision, it never fetches one.');
+    return;
+  }
+
+  if (sub === 'uninstall' || sub === 'remove') {
+    const r = uninstallClaude();
+    if (!r.changed) {
+      out(`prmpt: nothing of ours in ${r.path}`);
+    } else {
+      out(`prmpt: status line removed from ${r.path}`);
+      if (r.restored) out('  your original status line was put back');
+    }
+    clearSlot();
+    return;
+  }
+
+  if (sub === 'preview') {
+    const ad = readSlot({});
+    if (!ad) {
+      out('prmpt: nothing parked -- no ad has matched recently.');
+      return;
+    }
+    out(composeStatusLine({ ad, mode: 'card', columns: process.stdout.columns || 80 }));
+    return;
+  }
+
+  if (sub === 'status') {
+    for (const s of statusAll()) {
+      if (!s.supported) {
+        out(`${s.host.padEnd(12)} not available -- ${s.reason}`);
+        if (s.note) out(`  ${s.note}`);
+        continue;
+      }
+      out(`${s.host.padEnd(12)} ${s.installed ? 'installed' : s.present ? 'not installed' : 'host not found'}`);
+      out(`  ${s.path}`);
+      if (s.installed && s.chained) out('  chaining your previous status line');
+    }
+    const ad = readSlot({});
+    out('');
+    out(ad ? `parked ad: ${ad.headline}` : 'parked ad: (none)');
+    return;
+  }
+
+  throw new UserError(`unknown statusline command: ${sub}\n  try 'prmpt help'`);
+}
+
 // --- dispatch ---------------------------------------------------------------
 
 export async function run(argv) {
@@ -593,8 +772,10 @@ export async function run(argv) {
     case 'wallet':     return cmdWallet(args);
     case 'dashboard':
     case 'web':        return cmdDashboard(args);
+    case 'onboard':    return cmdOnboard(args);
     case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
+    case 'statusline': return cmdStatusline(args);
     case 'help':
     case '-h':
     case '--help':     out(HELP); return;

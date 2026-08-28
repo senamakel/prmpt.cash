@@ -148,23 +148,27 @@ test('the token travels in the Authorization header and nowhere else', async () 
 
 // --- the slot ---------------------------------------------------------------
 
-test('a decision is parked in a slot file for the status line to find', async () => {
+test('a decision is parked in the slot for the status line to find', async () => {
   const { home } = await fire();
-  const slot = path.join(configDirOf(home), 'slot-sess-prompt-start.json');
+  const slot = path.join(configDirOf(home), 'slot.json');
   const found = await waitFor(() => (fs.existsSync(slot) ? slot : null));
   assert.ok(found, 'no slot file was written');
   const parsed = JSON.parse(fs.readFileSync(slot, 'utf8'));
   assert.equal(parsed.requestId, 'req_abc123');
   assert.equal(parsed.headline, 'Ship faster with Widget CI');
   assert.equal(parsed.clickUrl, 'https://ads.example/c/req_abc123');
+  assert.equal(parsed.sessionId, 'sess-prompt-start');
+  // The filler is what makes this one billable when it renders. Without it the
+  // renderer could not tell it from a turn-end ad that was billed already.
+  assert.equal(parsed.filler, 'prompt');
   assert.ok(!parsed.impressedAt, 'nothing is billable until it renders');
   assert.equal(fs.statSync(slot).mode & 0o777, 0o600);
 });
 
-test('no match leaves no slot behind', async () => {
+test('no match leaves whatever was parked alone', async () => {
   const { home, request } = await fire({ respond: () => ({ data: { serveAd: null } }) });
   assert.ok(request, 'the child should still have asked');
-  const slot = path.join(configDirOf(home), 'slot-sess-prompt-start.json');
+  const slot = path.join(configDirOf(home), 'slot.json');
   // Give the child the same grace the positive case gets before concluding.
   const appeared = await waitFor(() => (fs.existsSync(slot) ? slot : null), { timeout: 750 });
   assert.equal(appeared, null, 'a no-match wrote a slot file');

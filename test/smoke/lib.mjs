@@ -284,8 +284,13 @@ export function ourEntries(config, event) {
   );
 }
 
-/** Where the plugin records the status-line command it displaced. */
-export const STATUSLINE_STATE = ['.config', 'prmpt', 'statusline.json'];
+/**
+ * Where the plugin records the status-line setting it displaced.
+ *
+ * One file for both wiring routes -- install.sh and `prmpt statusline install`
+ * -- so an install done one way can be undone the other.
+ */
+export const STATUSLINE_STATE = ['.config', 'prmpt', 'statusline-chain-claude.json'];
 
 /**
  * Where each supported host keeps its config, which event it fires, and what
@@ -316,7 +321,7 @@ export const HOSTS = [
     extraEvents: [
       { event: 'UserPromptSubmit', timeout: 5, matcher: undefined, hook: 'prompt-start.mjs' },
     ],
-    statusLine: 'status-line.mjs',
+    statusLine: 'statusline.mjs',
   },
   {
     agent: 'codex',

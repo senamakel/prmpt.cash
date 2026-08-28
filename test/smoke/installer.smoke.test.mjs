@@ -198,7 +198,11 @@ test("an existing status line is wrapped, not replaced", async () => {
   assert.equal(res.code, 0, res.stderr);
 
   const state = readJSON(path.join(box.home, ...STATUSLINE_STATE));
-  assert.equal(state.wrapped, theirs, 'their command was not recorded');
+  assert.deepEqual(
+    state,
+    { type: 'command', command: theirs },
+    'their whole setting was not recorded',
+  );
 
   const { command } = readJSON(file).statusLine;
   const ran = await runRecorded(command, {
@@ -228,9 +232,13 @@ test('re-running the installer never wraps our own command', async () => {
   }
 
   const state = readJSON(path.join(box.home, ...STATUSLINE_STATE));
-  assert.equal(state.wrapped, theirs, `three runs recorded: ${state.wrapped}`);
+  assert.equal(state.command, theirs, `three runs recorded: ${state.command}`);
+  // Anchored on the directory, exactly as the installer is. The fixture above
+  // is deliberately called their-statusline.mjs, which CONTAINS our file name:
+  // a substring test passes here and would also have the installer delete
+  // somebody's own status line on uninstall.
   assert.ok(
-    !state.wrapped.includes(CLAUDE.statusLine),
+    !/hooks[\/\\]statusline\.mjs/.test(state.command),
     'the installer recorded our own command as the one to wrap',
   );
 });
@@ -253,7 +261,11 @@ test('uninstall gives the status line back', async () => {
   assert.equal(res.code, 0, res.stderr);
 
   const after = readJSON(file);
-  assert.equal(after.statusLine?.command, theirs, 'their status line was not restored');
+  assert.deepEqual(
+    after.statusLine,
+    { type: 'command', command: theirs },
+    'their status line was not restored exactly as it was',
+  );
   assert.equal(after.model, 'opus', 'the rest of the config was lost');
   assert.equal(ourEntries(after, 'UserPromptSubmit').length, 0, 'the prompt hook survived uninstall');
 });

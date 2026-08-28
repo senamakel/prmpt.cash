@@ -80,7 +80,7 @@ $NodeBin = $node.Source
 # under the user profile as the POSIX hosts do.
 $Home_ = $env:USERPROFILE
 if (-not $Home_) { $Home_ = $HOME }
-$StateFile = Join-Path $Home_ '.config\prmpt\statusline.json'
+$StateFile = Join-Path $Home_ '.config\prmpt\statusline-chain-claude.json'
 if ($Project) {
   $ClaudeCfg = '.\.claude\settings.json'
   $CodexCfg  = '.\.codex\hooks.json'
@@ -157,11 +157,19 @@ if (j.hooks && Object.keys(j.hooks).length===0) delete j.hooks;
 // Give the status line back. Whatever was there before we arrived was
 // recorded at install time; without this the user is left with a footer
 // that runs a script we just deleted.
+// Ours, told apart from anybody else by the DIRECTORY as well as the
+// name. A bare "statusline.mjs" also matches a their-statusline.mjs that
+// somebody wrote themselves, and mistaking theirs for ours means either
+// deleting it or forking a copy of the renderer on every render.
+const MINE=/hooks[\/\\]statusline\.mjs/;
 const sl=j.statusLine;
-if (sl && typeof sl.command==="string" && sl.command.includes("status-line.mjs")) {
-  let wrapped="";
-  try { wrapped=JSON.parse(fs.readFileSync(state,"utf8")).wrapped||""; } catch {}
-  if (wrapped) j.statusLine={...sl, type:"command", command:wrapped}; else delete j.statusLine;
+if (sl && typeof sl.command==="string" && MINE.test(sl.command)) {
+  // Their whole setting goes back, not just the command: padding and any
+  // other key they set were theirs, and restoring the command into OUR
+  // object would hand them a merge of the two.
+  let chain=null;
+  try { const c=JSON.parse(fs.readFileSync(state,"utf8")); if (c && typeof c==="object") chain=c; } catch {}
+  if (chain) j.statusLine=chain; else delete j.statusLine;
   try { fs.rmSync(state,{force:true}); } catch {}
   hit=true;
 }
@@ -185,9 +193,11 @@ const prevCmd = typeof prev.command === "string" ? prev.command : "";
 // Record theirs so our renderer can run it and uninstall can hand it back.
 // Never record OUR OWN command: a re-install would otherwise make every
 // render fork a fresh copy of the renderer, forever.
-if (prevCmd && !prevCmd.includes("status-line.mjs")) {
+// Ours, told apart from anybody else by the DIRECTORY as well as the
+// name -- see the uninstall program above.
+if (prevCmd && !/hooks[\/\\]statusline\.mjs/.test(prevCmd)) {
   fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
-  fs.writeFileSync(state, JSON.stringify({ wrapped: prevCmd }, null, 2)+"\n", { mode:0o600 });
+  fs.writeFileSync(state, JSON.stringify(prev, null, 2)+"\n", { mode:0o600 });
   fs.chmodSync(state, 0o600);
 }
 // Their other statusLine keys (padding and friends) are display preferences
@@ -359,7 +369,7 @@ if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install d
 # The status-line surface: one hook to fetch a decision when the user presses
 # enter, and one command to render it in the footer while the model works.
 $PromptHook = Join-Path $Dir 'hooks\prompt-start.mjs'
-$StatusHook = Join-Path $Dir 'hooks\status-line.mjs'
+$StatusHook = Join-Path $Dir 'hooks\statusline.mjs'
 
 # ------------------------------------------------------------------------ link
 Write-Host ''
@@ -492,6 +502,12 @@ Write-Host ''
 Write-Host '  Restart your agent, then just work. Most turns match nothing and print'
 Write-Host '  nothing. On a match you get one labelled line; a click pays 70% of the'
 Write-Host '  clearing price to your wallet in USDC.'
+Write-Host ''
+# Mirrors install.sh: the link printed by the login above expires in two
+# minutes, so the durable instruction is the command.
+Write-Host "  Finish setup: node $Cli onboard"
+Write-Host '                Connect a GitHub or X account to lift the daily earnings'
+Write-Host '                cap, and pick which token you are paid in.'
 Write-Host ''
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"

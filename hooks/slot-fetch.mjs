@@ -18,7 +18,7 @@ import process from 'node:process';
 
 import { loadConfig } from './lib/config.mjs';
 import { confirmImpressions, serveAd } from './lib/api.mjs';
-import { dropPending, readPending, writeSlot } from './lib/slot.mjs';
+import { FILLER_PROMPT, dropPending, readPending, writeSlot } from './lib/slot.mjs';
 
 function quiet() {
   process.exit(0);
@@ -57,9 +57,20 @@ async function main() {
 
   if (job.input && typeof job.input === 'object') {
     const ad = await serveAd(config, job.input);
-    // A no-match writes nothing. An empty slot file would be indistinguishable
-    // from a stale one to the renderer, and would cost it a read every frame.
-    if (ad) writeSlot(job.sessionId ?? job.input.sessionId, ad);
+    // A no-match writes nothing, which is also the fallback: whatever the last
+    // turn parked stays in the slot and keeps rendering. Overwriting it with an
+    // empty file would trade a slightly stale ad for no ad at all.
+    //
+    // Tagged as the prompt filler, because THIS is the one that owes an
+    // impression: it was fetched for the status line and has not been billed
+    // anywhere else.
+    if (ad) {
+      writeSlot(ad, {
+        sessionId: job.sessionId ?? job.input.sessionId ?? '',
+        harness: job.input.harness ?? '',
+        filler: FILLER_PROMPT,
+      });
+    }
   }
 
   // Deliberately after the serve: the slot is time-sensitive and the flush is
