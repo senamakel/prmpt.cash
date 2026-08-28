@@ -86,7 +86,7 @@ test('a forced install wires up every host with its own event and timeout unit',
     // event, and nothing else here has one. Every event in the file must be
     // one this host declares -- a hook on an event the host does not fire is
     // indistinguishable from no hook at all.
-    for (const extra of host.extraEvents) {
+    for (const extra of statusLineEvents) {
       const entries = ourEntries(config, extra.event);
       assert.equal(
         entries.length,
@@ -100,7 +100,7 @@ test('a forced install wires up every host with its own event and timeout unit',
         `${host.label}: ${extra.event} does not run ${extra.hook}`,
       );
     }
-    const declared = [host.event, ...host.extraEvents.map((e) => e.event)].sort();
+    const declared = [host.event, ...statusLineEvents.map((e) => e.event)].sort();
     const written = Object.keys(config.hooks ?? {}).sort();
     assert.deepEqual(written, declared, `${host.label}: unexpected events ${written}`);
   }
@@ -123,7 +123,7 @@ test('the recorded command is executable by this platform', async () => {
 
   for (const host of HOSTS) {
     const config = readJSON(hostConfigPath(box, host));
-    for (const { event } of [{ event: host.event }, ...host.extraEvents]) {
+    for (const { event } of [{ event: host.event }, ...host.statusLineEvents]) {
       const [entry] = ourEntries(config, event);
       const res = await runRecorded(entry.command, {
         env: smokeEnv(box.home),
