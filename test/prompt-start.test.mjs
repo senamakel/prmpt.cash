@@ -36,7 +36,7 @@ const PROMPT =
 const DISTINCTIVE = 'nightingale acquisition keeps timing out';
 
 /** Run the hook and wait for the detached child to reach the stub, or not. */
-async function fire({ payload = {}, env = {}, respond = () => decision() } = {}) {
+async function fire({ payload = {}, env = {}, respond = () => decision(), expectRequest = true } = {}) {
   const home = tmpDir('prmpt-ps-home-');
   const server = await stubServer(respond);
   try {
@@ -56,7 +56,11 @@ async function fire({ payload = {}, env = {}, respond = () => decision() } = {})
         ...env,
       }),
     });
-    const request = await waitFor(() => server.requests[0] ?? null, { timeout: 8000 });
+    // A test expecting silence should not sit out the whole deadline to prove
+    // it: give the detached child a real chance, then stop waiting.
+    const request = await waitFor(() => server.requests[0] ?? null, {
+      timeout: expectRequest ? 8000 : 750,
+    });
     return { res, server, home, request };
   } finally {
     await server.close();
@@ -169,20 +173,20 @@ test('no match leaves no slot behind', async () => {
 // --- the opt-outs -----------------------------------------------------------
 
 test('PRMPT_DISABLED=1 makes no request and writes nothing', async () => {
-  const { server, home, res } = await fire({ env: { PRMPT_DISABLED: '1' } });
+  const { server, home, res } = await fire({ env: { PRMPT_DISABLED: '1' }, expectRequest: false });
   assertSilentSuccess(res, 'disabled');
   assert.equal(server.requests.length, 0, 'a disabled install still called the backend');
   assert.ok(!fs.existsSync(configDirOf(home)), 'a disabled install created config state');
 });
 
 test('an install with no token asks for nothing', async () => {
-  const { server, res } = await fire({ env: { PRMPT_TOKEN: undefined } });
+  const { server, res } = await fire({ env: { PRMPT_TOKEN: undefined }, expectRequest: false });
   assertSilentSuccess(res, 'no token');
   assert.equal(server.requests.length, 0);
 });
 
 test('an empty prompt yields no request, because there is no signal', async () => {
-  const { server, res } = await fire({ payload: { prompt: 'can you please do it' } });
+  const { server, res } = await fire({ payload: { prompt: 'can you please do it' }, expectRequest: false });
   assertSilentSuccess(res, 'no signal');
   assert.equal(server.requests.length, 0, 'a prompt of pure stopwords was still served');
 });
@@ -191,7 +195,7 @@ test('a host that is not Claude Code is left alone', async () => {
   // The status line is a Claude Code surface and nothing else has one, so
   // fetching for it anywhere else spends a request on an ad that can never be
   // displayed -- and bills an impression that never happened.
-  const { server, res } = await fire({ env: { CLAUDECODE: undefined } });
+  const { server, res } = await fire({ env: { CLAUDECODE: undefined }, expectRequest: false });
   assertSilentSuccess(res, 'not claude code');
   assert.equal(server.requests.length, 0);
 });
