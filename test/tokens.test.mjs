@@ -16,7 +16,7 @@ import { signalTokens } from '../hooks/lib/tokens.mjs';
 
 test('a prompt becomes lowercased keywords with the stopwords removed', () => {
   const tokens = signalTokens('Please fix the flaky Postgres integration test');
-  assert.deepEqual(tokens, ['flaky', 'fix', 'integration', 'postgres', 'test']);
+  assert.deepEqual(tokens, ['fix', 'flaky', 'integration', 'postgres', 'test']);
 });
 
 test('the tokens are sorted, so the sentence cannot be reconstructed', () => {
@@ -27,10 +27,14 @@ test('the tokens are sorted, so the sentence cannot be reconstructed', () => {
 });
 
 test('a distinctive phrase never survives as a phrase', () => {
-  const phrase = 'acquire nightingale before the quarterly restructure';
+  // Sorting can leave two words next to each other by coincidence, so the
+  // property worth asserting is not "no pair survives" -- it is that the
+  // PROMPT'S order is gone and the sentence itself is nowhere in the output.
+  const phrase = 'nightingale acquisition closes before the quarterly restructure';
   const tokens = signalTokens(phrase);
   assert.ok(!JSON.stringify(tokens).includes(phrase), 'the phrase survived verbatim');
-  assert.ok(!tokens.join(' ').includes('acquire nightingale'), 'two adjacent words survived');
+  assert.ok(!tokens.join(' ').includes('nightingale acquisition'), 'the prompt order survived');
+  assert.deepEqual(tokens, [...tokens].sort(), 'the tokens are not sorted');
 });
 
 test('duplicates collapse', () => {
