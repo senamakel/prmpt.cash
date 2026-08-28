@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const PLUGIN_DIR = path.resolve(here, '..');
 export const TURN_END = path.join(PLUGIN_DIR, 'hooks', 'turn-end.mjs');
+export const PROMPT_START = path.join(PLUGIN_DIR, 'hooks', 'prompt-start.mjs');
+export const STATUS_LINE = path.join(PLUGIN_DIR, 'hooks', 'status-line.mjs');
 
 /** The token used everywhere, so one assertion can prove it never leaks. */
 export const TEST_TOKEN = 'eyJ.test.SECRET_TOKEN_MUST_NEVER_BE_PRINTED';
@@ -160,6 +162,40 @@ export function run(script, { args = [], env = baseEnv(), stdin, cwd = PLUGIN_DI
 /** Spawn the end-of-turn hook. */
 export function runHook(opts) {
   return run(TURN_END, opts);
+}
+
+/** Spawn the prompt-start hook, which fires on Claude Code's UserPromptSubmit. */
+export function runPromptStart(opts) {
+  return run(PROMPT_START, opts);
+}
+
+/** Spawn the status-line command. */
+export function runStatusLine(opts) {
+  return run(STATUS_LINE, opts);
+}
+
+/**
+ * Wait for a condition, polling.
+ *
+ * prompt-start.mjs does its network call in a DETACHED child, so the hook has
+ * already exited by the time anything reaches the stub server. Waiting on the
+ * hook's own exit would assert against an empty request log every time.
+ * Resolves with the predicate's value, or null if the deadline passes -- so a
+ * test can assert "and nothing ever arrived" as easily as "it arrived".
+ */
+export async function waitFor(predicate, { timeout = 5000, interval = 25 } = {}) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const value = await predicate();
+    if (value) return value;
+    if (Date.now() > deadline) return null;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+}
+
+/** The config directory a sandboxed HOME resolves to. */
+export function configDirOf(home) {
+  return path.join(home, '.config', 'prmpt');
 }
 
 /**
