@@ -48,6 +48,10 @@ ok()   { printf '  %s+%s %s\n' "$G" "$R" "$*"; }
 skip() { printf '  %s-%s %s\n' "$D" "$R" "$*"; }
 warn() { printf '  %s!%s %s\n' "$Y" "$R" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$E" "$R" "$*" >&2; exit 1; }
+# The install is three steps and says so: what this is, where it goes, and the
+# hand-off to the web. Somebody piping a script into sh deserves to know how
+# much of it is left, and which parts are decisions rather than progress.
+step() { say ""; say "${B}[$1/3] $2${R}"; say ""; }
 
 usage() {
   cat <<USAGE
@@ -214,9 +218,164 @@ if [ "$UNINSTALL" -eq 1 ]; then
   exit 0
 fi
 
-# ------------------------------------------------------------------ get source
-say "${B}prmpt.cash${R}"
+# --------------------------------------------------------------------- step 1
+# What is about to be installed, before any of it is.
+#
+# The claims here are the ones somebody would want checked before they let a
+# script wire itself into their editor: what leaves the machine, how much it
+# can cost them if the backend misbehaves, and how to turn it off. All three
+# are properties of the code in this repo, so they are stated plainly rather
+# than sold.
 say ""
+say "${B}prmpt.cash${R}  ${D}an ad engine for coding agents${R}"
+
+step 1 "What this is"
+say "  One labelled sponsored line at the end of a turn, and you are paid for"
+say "  it. Most turns match nothing and print nothing at all."
+say ""
+say "  ${D}What leaves this machine${R}  the final text of a finished turn, to be"
+say "  matched against live campaigns. Not your prompts, not your code, not your"
+say "  files. The status-line surface sends keywords derived locally instead."
+say ""
+say "  ${D}What it costs you${R}  one request with a hard 1.5 second budget that fails"
+say "  open and silent. A slow or missing backend is something your agent never"
+say "  sees. There are no dependencies to audit -- it is plain Node ESM."
+say ""
+say "  ${D}What you earn${R}  70% of the clearing price on every impression and every"
+say "  click, paid to a wallet created on this machine in step 2. USDC, cbBTC or"
+say "  ETH on Base; SOL, TINY or XAUt0 on Solana -- you choose which in step 3."
+say ""
+say "  ${D}Off at any time${R}  export PRMPT_DISABLED=1, or --uninstall to remove it."
+
+
+# ------------------------------------------------------------------- selection
+# What gets installed where, chosen by the person installing it.
+#
+# The picker is additive, never a new requirement: it runs ONLY when nothing on
+# the command line already decided the answer AND there is a terminal to draw it
+# on. A Dockerfile, CI, a provisioning script or `--agents ...` all take exactly
+# the path they took before, unprompted.
+#
+# It reads /dev/tty rather than stdin, and that is the whole reason it works at
+# all: the canonical install is `curl ... | sh`, where stdin IS the script. A
+# `read` from stdin there would eat the rest of the installer.
+detected() { command -v "$1" >/dev/null 2>&1; }
+
+# The same test the autodetect path uses -- a binary on PATH, or the config
+# directory the host leaves behind. Kept in one place so the picker cannot
+# disagree with what an unattended install would have done.
+host_present() {
+  case "$1" in
+    claude)     detected claude || [ -d "$HOME/.claude" ] ;;
+    statusline) host_present claude ;;
+    codex)      detected codex  || [ -d "$HOME/.codex" ] ;;
+    gemini)     detected gemini || [ -d "$HOME/.gemini" ] ;;
+    amp)        detected amp    || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/amp" ] ;;
+    cursor)     detected cursor ;;
+    code)       detected code ;;
+    *)          return 1 ;;
+  esac
+}
+
+pick_label() {
+  case "$1" in
+    claude)     printf '%s' "Claude Code   ${D}Stop -- the line at the end of a turn${R}" ;;
+    statusline) printf '%s' "  status line ${D}the same ad above your prompt while it thinks${R}" ;;
+    codex)      printf '%s' "Codex         ${D}Stop -- the line at the end of a turn${R}" ;;
+    gemini)     printf '%s' "Gemini CLI    ${D}AfterAgent -- the line at the end of a turn${R}" ;;
+    amp)        printf '%s' "Amp           ${D}agent.end -- unverified against a live install${R}" ;;
+    cursor)     printf '%s' "Cursor        ${D}editor extension: sidebar card + chat card${R}" ;;
+    code)       printf '%s' "VS Code       ${D}editor extension: sidebar card${R}" ;;
+  esac
+}
+
+PICK_ROWS="claude statusline codex gemini amp cursor code"
+
+pick_get()    { eval "printf '%s' \"\$PICK_$1\""; }
+pick_set()    { eval "PICK_$1=$2"; }
+pick_toggle() { if [ "$(pick_get "$1")" = 1 ]; then pick_set "$1" 0; else pick_set "$1" 1; fi; }
+
+# Everything starts ticked, including hosts that are not installed yet: pressing
+# Enter is the whole install, and a host wired before it exists simply works the
+# day it arrives. Detection decides the "(not found)" note, not the box.
+#
+# The status line is the one row with a cost attached -- Claude Code hides most
+# of its footer key hints while any custom status line is set -- so it is ticked
+# but the cost is spelled out under the list, where somebody can untick it
+# BEFORE it happens rather than wondering afterwards where their hints went.
+for _k in $PICK_ROWS; do pick_set "$_k" 1; done
+
+pick_render() {
+  say ""
+  _n=0
+  for _k in $PICK_ROWS; do
+    _n=$((_n + 1))
+    if [ "$(pick_get "$_k")" = 1 ]; then _box="${G}[x]${R}"; else _box="${D}[ ]${R}"; fi
+    if host_present "$_k"; then _note=""; else _note="  ${D}(not found)${R}"; fi
+    printf '  %s %s. %s%s\n' "$_box" "$_n" "$(pick_label "$_k")" "$_note"
+  done
+  say ""
+  say "  ${D}A host that is not there yet is still wired up, so it works the day you"
+  say "  install it. A status line hides most of Claude Code's footer key hints,"
+  say "  including \"esc to interrupt\" -- that is Claude Code behaviour, not prmpt's."
+  say "  Untick 2 to keep them.${R}"
+  say ""
+}
+
+step 2 "Choose where it goes"
+
+if [ "$ASSUME_YES" -eq 0 ] && [ -z "$AGENTS" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+  while :; do
+    pick_render
+    printf '  %sNumber to toggle%s, %sa%s all, %sn%s none, %sEnter%s to install, %sq%s to quit: ' \
+      "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R"
+    if ! IFS= read -r _reply < /dev/tty; then say ""; break; fi
+    # Commas are what people type when a prompt shows a list; accept them.
+    _reply=$(printf '%s' "$_reply" | tr ',' ' ')
+    case "$_reply" in
+      ''|y|Y|yes|YES) break ;;
+      q|Q|quit) say ""; say "  nothing was installed."; exit 0 ;;
+      a|A|all)  for _k in $PICK_ROWS; do pick_set "$_k" 1; done ;;
+      n|N|none) for _k in $PICK_ROWS; do pick_set "$_k" 0; done ;;
+      *)
+        for _tok in $_reply; do
+          case "$_tok" in
+            ''|*[!0-9]*) warn "not a number: $_tok"; continue ;;
+          esac
+          _n=0; _hit=0
+          for _k in $PICK_ROWS; do
+            _n=$((_n + 1))
+            if [ "$_n" = "$_tok" ]; then pick_toggle "$_k"; _hit=1; break; fi
+          done
+          [ "$_hit" -eq 1 ] || warn "no such option: $_tok"
+        done ;;
+    esac
+  done
+
+  # The status line lives inside Claude Code's settings file and is wired up as
+  # part of wiring Claude Code. Asking for it without the host it draws in is a
+  # request that could only ever do nothing, so it selects the host too rather
+  # than being silently dropped.
+  if [ "$(pick_get statusline)" = 1 ] && [ "$(pick_get claude)" = 0 ]; then
+    pick_set claude 1
+    warn "the status line is drawn by Claude Code -- selecting Claude Code too."
+  fi
+
+  AGENTS=""
+  for _k in claude codex gemini amp; do
+    if [ "$(pick_get "$_k")" = 1 ]; then AGENTS="${AGENTS:+$AGENTS,}$_k"; fi
+  done
+  if [ "$(pick_get statusline)" = 1 ]; then STATUSLINE=1; else STATUSLINE=0; fi
+  if [ "$(pick_get cursor)" = 1 ]; then EDITOR_CURSOR=1; else EDITOR_CURSOR=0; fi
+  if [ "$(pick_get code)" = 1 ]; then EDITOR_CODE=1; else EDITOR_CODE=0; fi
+
+  [ -n "$AGENTS" ] || die "nothing selected -- nothing was installed."
+fi
+
+# Per-editor flags fall back to the single --editor flag, so the non-interactive
+# behaviour is unchanged: --editor means both, --no-editor means neither.
+: "${EDITOR_CURSOR:=${EDITOR_EXT:-}}"
+: "${EDITOR_CODE:=${EDITOR_EXT:-}}"
 
 # Running from a checkout? Use it. Otherwise fetch.
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo "")
@@ -341,135 +500,6 @@ HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 # enter, and one command to render it in the footer while the model works.
 PROMPT_HOOK="$HOOK_DIR/hooks/prompt-start.mjs"
 STATUS_HOOK="$HOOK_DIR/hooks/statusline.mjs"
-
-# ------------------------------------------------------------------- selection
-# What gets installed where, chosen by the person installing it.
-#
-# The picker is additive, never a new requirement: it runs ONLY when nothing on
-# the command line already decided the answer AND there is a terminal to draw it
-# on. A Dockerfile, CI, a provisioning script or `--agents ...` all take exactly
-# the path they took before, unprompted.
-#
-# It reads /dev/tty rather than stdin, and that is the whole reason it works at
-# all: the canonical install is `curl ... | sh`, where stdin IS the script. A
-# `read` from stdin there would eat the rest of the installer.
-detected() { command -v "$1" >/dev/null 2>&1; }
-
-# The same test the autodetect path uses -- a binary on PATH, or the config
-# directory the host leaves behind. Kept in one place so the picker cannot
-# disagree with what an unattended install would have done.
-host_present() {
-  case "$1" in
-    claude)     detected claude || [ -d "$HOME/.claude" ] ;;
-    statusline) host_present claude ;;
-    codex)      detected codex  || [ -d "$HOME/.codex" ] ;;
-    gemini)     detected gemini || [ -d "$HOME/.gemini" ] ;;
-    amp)        detected amp    || [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/amp" ] ;;
-    cursor)     detected cursor ;;
-    code)       detected code ;;
-    *)          return 1 ;;
-  esac
-}
-
-pick_label() {
-  case "$1" in
-    claude)     printf '%s' "Claude Code   ${D}Stop -- the line at the end of a turn${R}" ;;
-    statusline) printf '%s' "  status line ${D}the same ad above your prompt while it thinks${R}" ;;
-    codex)      printf '%s' "Codex         ${D}Stop -- the line at the end of a turn${R}" ;;
-    gemini)     printf '%s' "Gemini CLI    ${D}AfterAgent -- the line at the end of a turn${R}" ;;
-    amp)        printf '%s' "Amp           ${D}agent.end -- unverified against a live install${R}" ;;
-    cursor)     printf '%s' "Cursor        ${D}editor extension: sidebar card + chat card${R}" ;;
-    code)       printf '%s' "VS Code       ${D}editor extension: sidebar card${R}" ;;
-  esac
-}
-
-PICK_ROWS="claude statusline codex gemini amp cursor code"
-
-pick_get()    { eval "printf '%s' \"\$PICK_$1\""; }
-pick_set()    { eval "PICK_$1=$2"; }
-pick_toggle() { if [ "$(pick_get "$1")" = 1 ]; then pick_set "$1" 0; else pick_set "$1" 1; fi; }
-
-# Everything starts ticked, including hosts that are not installed yet: pressing
-# Enter is the whole install, and a host wired before it exists simply works the
-# day it arrives. Detection decides the "(not found)" note, not the box.
-#
-# The status line is the one row with a cost attached -- Claude Code hides most
-# of its footer key hints while any custom status line is set -- so it is ticked
-# but the cost is spelled out under the list, where somebody can untick it
-# BEFORE it happens rather than wondering afterwards where their hints went.
-for _k in $PICK_ROWS; do pick_set "$_k" 1; done
-
-pick_render() {
-  say ""
-  say "${B}Where should prmpt install itself?${R}"
-  say ""
-  _n=0
-  for _k in $PICK_ROWS; do
-    _n=$((_n + 1))
-    if [ "$(pick_get "$_k")" = 1 ]; then _box="${G}[x]${R}"; else _box="${D}[ ]${R}"; fi
-    if host_present "$_k"; then _note=""; else _note="  ${D}(not found)${R}"; fi
-    printf '  %s %s. %s%s\n' "$_box" "$_n" "$(pick_label "$_k")" "$_note"
-  done
-  say ""
-  say "  ${D}A host that is not there yet is still wired up, so it works the day you"
-  say "  install it. A status line hides most of Claude Code's footer key hints,"
-  say "  including \"esc to interrupt\" -- that is Claude Code behaviour, not prmpt's."
-  say "  Untick 2 to keep them.${R}"
-  say ""
-}
-
-if [ "$ASSUME_YES" -eq 0 ] && [ -z "$AGENTS" ] && [ -t 1 ] && [ -r /dev/tty ]; then
-  while :; do
-    pick_render
-    printf '  %sNumber to toggle%s, %sa%s all, %sn%s none, %sEnter%s to install, %sq%s to quit: ' \
-      "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R"
-    if ! IFS= read -r _reply < /dev/tty; then say ""; break; fi
-    # Commas are what people type when a prompt shows a list; accept them.
-    _reply=$(printf '%s' "$_reply" | tr ',' ' ')
-    case "$_reply" in
-      ''|y|Y|yes|YES) break ;;
-      q|Q|quit) say ""; say "  nothing was installed."; exit 0 ;;
-      a|A|all)  for _k in $PICK_ROWS; do pick_set "$_k" 1; done ;;
-      n|N|none) for _k in $PICK_ROWS; do pick_set "$_k" 0; done ;;
-      *)
-        for _tok in $_reply; do
-          case "$_tok" in
-            ''|*[!0-9]*) warn "not a number: $_tok"; continue ;;
-          esac
-          _n=0; _hit=0
-          for _k in $PICK_ROWS; do
-            _n=$((_n + 1))
-            if [ "$_n" = "$_tok" ]; then pick_toggle "$_k"; _hit=1; break; fi
-          done
-          [ "$_hit" -eq 1 ] || warn "no such option: $_tok"
-        done ;;
-    esac
-  done
-
-  # The status line lives inside Claude Code's settings file and is wired up as
-  # part of wiring Claude Code. Asking for it without the host it draws in is a
-  # request that could only ever do nothing, so it selects the host too rather
-  # than being silently dropped.
-  if [ "$(pick_get statusline)" = 1 ] && [ "$(pick_get claude)" = 0 ]; then
-    pick_set claude 1
-    warn "the status line is drawn by Claude Code -- selecting Claude Code too."
-  fi
-
-  AGENTS=""
-  for _k in claude codex gemini amp; do
-    if [ "$(pick_get "$_k")" = 1 ]; then AGENTS="${AGENTS:+$AGENTS,}$_k"; fi
-  done
-  if [ "$(pick_get statusline)" = 1 ]; then STATUSLINE=1; else STATUSLINE=0; fi
-  if [ "$(pick_get cursor)" = 1 ]; then EDITOR_CURSOR=1; else EDITOR_CURSOR=0; fi
-  if [ "$(pick_get code)" = 1 ]; then EDITOR_CODE=1; else EDITOR_CODE=0; fi
-
-  [ -n "$AGENTS" ] || die "nothing selected -- nothing was installed."
-fi
-
-# Per-editor flags fall back to the single --editor flag, so the non-interactive
-# behaviour is unchanged: --editor means both, --no-editor means neither.
-: "${EDITOR_CURSOR:=${EDITOR_EXT:-}}"
-: "${EDITOR_CODE:=${EDITOR_EXT:-}}"
 
 # ------------------------------------------------------------------------ link
 CLI="$INSTALL_DIR/bin/prmpt.mjs"
