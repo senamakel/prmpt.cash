@@ -79,7 +79,10 @@ test('the injected script never interpolates unescaped copy', () => {
   // Ad copy reaches the renderer over the bridge at runtime and is set with
   // textContent. Nothing model-generated may be baked into the script text.
   const script = chatInject.chatInjectScript(51793);
-  assert.ok(!script.includes('innerHTML'), 'the card must not use innerHTML');
+  // Match assignment, not the word: the script carries a comment explaining
+  // why innerHTML is not used, and that comment is not a finding.
+  assert.ok(!/\.innerHTML\s*=/.test(script), 'the card must never assign innerHTML');
+  assert.ok(!/insertAdjacentHTML|outerHTML\s*=/.test(script));
   assert.match(script, /textContent/);
 });
 
