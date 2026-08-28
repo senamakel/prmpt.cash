@@ -1,7 +1,7 @@
 {
   "name": "prmpt",
   "version": "0.2.0",
-  "description": "End-of-turn sponsored-line hook for coding agents. Get paid 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana.",
+  "description": "End-of-reply sponsored-line hook for coding agents. Earn free crypto when someone clicks: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
   "license": "MIT",
   "type": "module",
   "repository": {

@@ -12,7 +12,7 @@
     {
       "name": "prmpt",
       "source": "./",
-      "description": "Prints one clearly-labelled sponsored line at the end of a turn that genuinely matches an advertiser, and pays you 70% of the click price: USDC, cbBTC or ETH on Base, or SOL, TINY or XAUt0 on Solana. Most turns match nothing and print nothing.",
+      "description": "Prints one clearly-labelled sponsored line at the end of a reply that actually matches an advertiser, and clicking it pays you: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana. Almost every reply matches nothing and prints nothing.",
       "version": "0.1.0",
       "author": {
         "name": "prmpt.cash",
