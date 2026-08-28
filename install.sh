@@ -430,9 +430,12 @@ say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
 say ""
-say "  ${D}Finish setup:${R} $BIN_HINT onboard"
-say "  ${D}${R}               connect a GitHub or X account to lift the daily"
-say "  ${D}${R}               earnings cap, and pick which token you are paid in."
+# The login above already printed a signed-in link, but that code lives two
+# minutes -- long dead by the time somebody reads this and comes back. So the
+# durable instruction is the command, not the link.
+say "  ${D}Finish setup:${R} $NODE_BIN $CLI onboard"
+say "                  Connect a GitHub or X account to lift the daily earnings"
+say "                  cap, and pick which token you are paid in."
 say ""
 say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
 if [ -f "$INSTALL_DIR/install.sh" ]; then
