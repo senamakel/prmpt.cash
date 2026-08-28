@@ -306,7 +306,6 @@ pick_toggle() { if [ "$(pick_get "$1")" = 1 ]; then pick_set "$1" 0; else pick_s
 for _k in $PICK_ROWS; do pick_set "$_k" 1; done
 
 pick_render() {
-  say ""
   _n=0
   for _k in $PICK_ROWS; do
     _n=$((_n + 1))
@@ -376,6 +375,8 @@ fi
 # behaviour is unchanged: --editor means both, --no-editor means neither.
 : "${EDITOR_CURSOR:=${EDITOR_EXT:-}}"
 : "${EDITOR_CODE:=${EDITOR_EXT:-}}"
+
+say ""
 
 # Running from a checkout? Use it. Otherwise fetch.
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo "")
@@ -774,6 +775,7 @@ if [ "$CONFIGURED" -eq 0 ]; then
 fi
 
 if [ "$ENDPOINT" != "$DEFAULT_ENDPOINT" ]; then
+  say ""
   say "${Y}note${R} endpoint is $ENDPOINT -- export PRMPT_ENDPOINT to match in your shell."
 fi
 
