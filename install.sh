@@ -29,6 +29,8 @@ ENDPOINT=""
 AGENTS=""
 UNINSTALL=0
 NO_LOGIN=0
+NO_ONBOARD=0
+ASSUME_YES=0
 SCOPE="user"
 INSTALL_DIR=""
 
@@ -51,6 +53,10 @@ ${B}prmpt.cash installer${R}
 
   --no-login           Install and wire up the agents, but create no wallet
                        (PRMPT_NO_LOGIN=1 does the same, for scripted installs)
+  --no-onboard         Do not open the setup page in a browser at the end
+                       (PRMPT_NO_ONBOARD=1 does the same)
+  -y, --yes            Skip the picker and take the autodetected defaults.
+                       Implied whenever there is no terminal to draw it on
   --version <tag>      Install a specific release, e.g. v0.2.0 (default: latest)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
@@ -86,6 +92,8 @@ USAGE
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-login)  NO_LOGIN=1; shift ;;
+    --no-onboard) NO_ONBOARD=1; shift ;;
+    -y|--yes)    ASSUME_YES=1; shift ;;
     --version)   VERSION="${2:-}"; shift 2 ;;
     --version=*) VERSION="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
@@ -114,6 +122,8 @@ done
 # signs in against the DEFAULT endpoint, which is production, and creates a real
 # publisher account behind a wallet that dies with the machine.
 [ "${PRMPT_NO_LOGIN:-}" = "1" ] && NO_LOGIN=1
+[ "${PRMPT_NO_ONBOARD:-}" = "1" ] && NO_ONBOARD=1
+[ "${PRMPT_YES:-}" = "1" ] && ASSUME_YES=1
 if [ -z "$INSTALL_DIR" ]; then
   INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
