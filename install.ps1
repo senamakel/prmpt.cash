@@ -34,6 +34,8 @@ param(
   [string] $Dir      = $env:PRMPT_DIR,
   [switch] $Project,
   [switch] $StatusLine,
+  [switch] $NoOnboard,
+  [switch] $Yes,
   [switch] $Uninstall
 )
 
@@ -43,6 +45,8 @@ $ErrorActionPreference = 'Stop'
 # easily pass a switch. Without it the installer signs in against the default
 # endpoint -- production -- and creates a real publisher behind a throwaway wallet.
 if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
+if ($env:PRMPT_NO_ONBOARD -eq '1') { $NoOnboard = [switch]$true }
+if ($env:PRMPT_YES -eq '1') { $Yes = [switch]$true }
 
 $RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'
 $RepoSlug        = 'senamakel/prmpt.cash'
@@ -372,6 +376,83 @@ if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install d
 $PromptHook = Join-Path $Dir 'hooks\prompt-start.mjs'
 $StatusHook = Join-Path $Dir 'hooks\statusline.mjs'
 
+# ------------------------------------------------------------------- selection
+# The same picker install.sh draws, and under the same rule: it runs ONLY when
+# nothing already decided the answer and there is a console to read a key from.
+# -Agents, -Yes, PRMPT_YES=1 or a non-interactive host all take the old path.
+function Test-HostPresent {
+  param([string] $Name)
+  switch ($Name) {
+    'claude'     { return [bool](Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.claude')) }
+    'statusline' { return (Test-HostPresent 'claude') }
+    'codex'      { return [bool](Get-Command codex  -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.codex')) }
+    'gemini'     { return [bool](Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.gemini')) }
+    'amp'        { return [bool](Get-Command amp    -ErrorAction SilentlyContinue) -or (Test-Path $AmpDir) }
+  }
+  return $false
+}
+
+# Interactive means: a console we can read a line from, and a user who did not
+# already say what they wanted. Host.UI.RawUI is absent under a non-interactive
+# runspace, which is what makes this safe in CI.
+$interactive = (-not $Yes) -and (-not $Agents) -and $Host.UI -and $Host.UI.RawUI -and -not [Console]::IsInputRedirected
+
+if ($interactive) {
+  $rows = @(
+    @{ Key='claude';     Label='Claude Code   Stop -- the line at the end of a turn' },
+    @{ Key='statusline'; Label='  status line the same ad above your prompt while it thinks' },
+    @{ Key='codex';      Label='Codex         Stop -- the line at the end of a turn' },
+    @{ Key='gemini';     Label='Gemini CLI    AfterAgent -- the line at the end of a turn' },
+    @{ Key='amp';        Label='Amp           agent.end -- unverified against a live install' }
+  )
+  # Defaults are what an unattended run would have done: every host present,
+  # nothing that is not. The status line stays off even with Claude Code -- it
+  # costs the user their footer key hints, so it is asked for, never assumed.
+  $picked = @{}
+  foreach ($r in $rows) { $picked[$r.Key] = (Test-HostPresent $r.Key) }
+  $picked['statusline'] = $false
+
+  while ($true) {
+    Write-Host ''
+    Write-Host 'Where should prmpt install itself?' -ForegroundColor White
+    Write-Host ''
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+      $r = $rows[$i]
+      $box = if ($picked[$r.Key]) { '[x]' } else { '[ ]' }
+      $note = if (Test-HostPresent $r.Key) { '' } else { '  (not found)' }
+      Write-Host ("  {0} {1}. {2}{3}" -f $box, ($i + 1), $r.Label, $note)
+    }
+    Write-Host ''
+    Write-Host '  A status line hides most of Claude Code''s footer key hints, including' -ForegroundColor DarkGray
+    Write-Host '  "esc to interrupt". That is Claude Code behaviour, not prmpt''s.' -ForegroundColor DarkGray
+    Write-Host ''
+    $reply = Read-Host '  Number to toggle, a all, n none, Enter to install, q to quit'
+    $reply = ($reply -replace ',', ' ').Trim()
+    if ($reply -eq '' -or $reply -match '^(y|yes)$') { break }
+    if ($reply -match '^(q|quit)$') { Write-Host ''; Write-Host '  nothing was installed.'; exit 0 }
+    if ($reply -match '^(a|all)$')  { foreach ($r in $rows) { $picked[$r.Key] = $true };  continue }
+    if ($reply -match '^(n|none)$') { foreach ($r in $rows) { $picked[$r.Key] = $false }; continue }
+    foreach ($tok in ($reply -split '\s+')) {
+      if ($tok -notmatch '^[0-9]+$') { Write-Warn "not a number: $tok"; continue }
+      $n = [int] $tok
+      if ($n -lt 1 -or $n -gt $rows.Count) { Write-Warn "no such option: $tok"; continue }
+      $k = $rows[$n - 1].Key
+      $picked[$k] = -not $picked[$k]
+    }
+  }
+
+  # The status line is drawn by Claude Code and wired up as part of wiring it.
+  # Asking for it alone could only ever do nothing, so it selects the host too.
+  if ($picked['statusline'] -and -not $picked['claude']) {
+    $picked['claude'] = $true
+    Write-Warn 'the status line is drawn by Claude Code -- selecting Claude Code too.'
+  }
+
+  $Agents = (@('claude','codex','gemini','amp') | Where-Object { $picked[$_] }) -join ','
+  $StatusLine = [switch] $picked['statusline']
+  if (-not $Agents) { Die 'nothing selected -- nothing was installed.' }
+}
+
 # ------------------------------------------------------------------------ link
 Write-Host ''
 $cfgFile = Join-Path $Home_ '.config\prmpt\config.json'
@@ -387,7 +468,10 @@ if (Test-Path $cfgFile) {
   # the agents still get wired up, and the hook retries in the background.
   Write-Host 'Creating a wallet and signing in' -ForegroundColor White
   $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin $Cli login
+  # --no-onboard: the setup link is minted at the END of this run instead. It
+  # is single-use and lives two minutes -- dead long before the user has read
+  # past the agent wiring that still has to happen.
+  & $NodeBin $Cli login --no-onboard
   if ($LASTEXITCODE -ne 0) {
     Write-Warn 'sign-in failed -- the agents are still being wired up.'
     Write-Warn 'the hook retries in the background, or run it yourself:'
@@ -506,11 +590,26 @@ Write-Host '  Restart your agent, then just work. Most turns match nothing and p
 Write-Host '  nothing. On a match you get one labelled line; a click pays 70% of the'
 Write-Host '  clearing price to your wallet in USDC.'
 Write-Host ''
-# Mirrors install.sh: the link printed by the login above expires in two
-# minutes, so the durable instruction is the command.
-Write-Host "  Finish setup: node $Cli onboard"
-Write-Host '                Connect a GitHub or X account to lift the daily earnings'
-Write-Host '                cap, and pick which token you are paid in.'
+# Mirrors install.sh: finishing setup on the web is part of installing, not a
+# second command to remember. It runs here, last, because the code is single-use
+# and expires in two minutes. Best effort -- the token is already on disk and
+# the hooks are already wired, so a failed round trip must not fail the install.
+if ($NoOnboard -or -not (Test-Path $cfgFile)) {
+  Write-Host "  Finish setup: node $Cli onboard"
+  Write-Host '                Connect a GitHub or X account to lift the daily earnings'
+  Write-Host '                cap, and pick which token you are paid in.'
+} else {
+  Write-Host 'Finishing setup on the web' -ForegroundColor White
+  Write-Host '  Connect a GitHub or X account to lift the daily earnings cap, and'
+  Write-Host '  pick which token you are paid in.' 
+  Write-Host ''
+  $env:PRMPT_ENDPOINT = $Endpoint
+  & $NodeBin $Cli onboard
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn 'could not open the setup page. Run it yourself when you are ready:'
+    Write-Warn "  node $Cli onboard"
+  }
+}
 Write-Host ''
 if (-not $StatusLine) {
   # Mirrors install.sh: the trade-off is the reason this is off, and somebody
