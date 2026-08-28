@@ -325,3 +325,30 @@ test('the whole line respects COLUMNS when the ad does fit', async () => {
   assert.ok(text.length <= 60, `line is ${text.length} chars, over COLUMNS=60: ${text}`);
   assert.ok(text.includes('Sponsored'));
 });
+
+// --- the backend is not trusted with the user's terminal --------------------
+
+test('escape sequences in the headline are never handed to the terminal', async () => {
+  // The headline is written by a model, server-side, and lands unescaped in
+  // somebody's footer. An escape in it could clear the screen, move the cursor
+  // or hide what it just did.
+  const { line } = await render({
+    slot: { ...AD, headline: 'Buy\x1b[2J\x1b[Hthis\x07 now\r\nsecond line' },
+  });
+  const afterLabel = line.slice(line.indexOf('Sponsored'));
+  assert.ok(!afterLabel.includes('\x1b[2J'), 'a screen-clear reached the terminal');
+  assert.ok(!afterLabel.includes('\x07'), 'a bell reached the terminal');
+  assert.equal(line.split('\n').length, 1, 'the headline broke the line in two');
+});
+
+test('a clickUrl that is not a plain http URL is not made into a link', async () => {
+  // The URL sits inside an OSC 8 escape, so a control character in it would
+  // close the sequence early and print whatever followed straight to screen.
+  const { res, line } = await render({
+    slot: { ...AD, clickUrl: 'https://ads.example/c/x\x1b\\\x1b[31mPWNED' },
+  });
+  assert.equal(res.code, 0);
+  assert.ok(!line.includes('PWNED'), 'the injected payload reached the terminal');
+  assert.ok(!line.includes('\x1b]8;;'), 'an unsafe URL was still turned into a link');
+  assert.ok(visible(line).includes('Sponsored'), 'the ad text itself should still render');
+});
