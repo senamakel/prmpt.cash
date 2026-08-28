@@ -2,7 +2,7 @@
   "name": "prmpt",
   "version": "0.3.0",
   "description": "End-of-reply sponsored-line hook for coding agents. Earn free crypto when someone clicks: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "repository": {
     "type": "git",
