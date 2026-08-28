@@ -52,6 +52,10 @@ $DefaultEndpoint = 'https://api.prmpt.cash/graphql'
 if (-not $Endpoint) { $Endpoint = $DefaultEndpoint }
 if (-not $Dir) { $Dir = Join-Path $env:LOCALAPPDATA 'prmpt' }
 
+# Where the status line the user already had is recorded, so our renderer can
+# run it and uninstall can hand it back. Deliberately not config.json, which is
+# rewritten by every code path that touches settings.
+
 function Write-Ok   { param($m) Write-Host "  + $m" -ForegroundColor Green }
 function Write-Skip { param($m) Write-Host "  - $m" -ForegroundColor DarkGray }
 function Write-Warn { param($m) Write-Host "  ! $m" -ForegroundColor Yellow }
@@ -76,6 +80,7 @@ $NodeBin = $node.Source
 # under the user profile as the POSIX hosts do.
 $Home_ = $env:USERPROFILE
 if (-not $Home_) { $Home_ = $HOME }
+$StateFile = Join-Path $Home_ '.config\prmpt\statusline.json'
 if ($Project) {
   $ClaudeCfg = '.\.claude\settings.json'
   $CodexCfg  = '.\.codex\hooks.json'
@@ -223,6 +228,7 @@ if ($Uninstall) {
   foreach ($f in @($ClaudeCfg, $CodexCfg, $GeminiCfg)) {
     if (Test-Path $f) {
       $env:PRMPT_CFG = $f
+      $env:PRMPT_STATE = $StateFile
       if ((Invoke-NodeScript -Script $CleanJs) -eq 0) {
         Write-Ok "cleaned $f (backup: $f.bak)"
       }
@@ -350,6 +356,10 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
 
 $Hook = Join-Path $Dir 'hooks\turn-end.mjs'
 if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install did not complete." }
+# The status-line surface: one hook to fetch a decision when the user presses
+# enter, and one command to render it in the footer while the model works.
+$PromptHook = Join-Path $Dir 'hooks\prompt-start.mjs'
+$StatusHook = Join-Path $Dir 'hooks\status-line.mjs'
 
 # ------------------------------------------------------------------------ link
 Write-Host ''
@@ -381,6 +391,9 @@ if (Test-Path $cfgFile) {
 #   Codex        Stop        timeout SECONDS
 #   Gemini CLI   AfterAgent  timeout MILLISECONDS, and wants a matcher
 #   Amp          agent.end   a TypeScript plugin, not a hook at all
+#
+# Claude Code gets two more, because it is the only host with a status line:
+# UserPromptSubmit to fetch, and the statusLine setting to render.
 Write-Host ''
 $scope = if ($Project) { 'project' } else { 'user' }
 Write-Host "Wiring up agents ($scope scope)" -ForegroundColor White
@@ -416,10 +429,37 @@ foreach ($t in $targets) {
   $env:PRMPT_TIMEOUT = "$($t.Timeout)"
   $env:PRMPT_MATCHER = $t.Matcher
   $env:PRMPT_HOOK    = $Hook
+  $env:PRMPT_BACKUP  = '1'
   $rc = Invoke-NodeScript -Script $MergeJs
   if ($rc -eq 0) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"
     $configured++
+
+    # Claude Code only. Two further passes over the SAME file, so neither takes
+    # a backup: the one above already captured what the user actually had, and
+    # a second would overwrite it with our own half-finished work.
+    if ($t.Name -eq 'claude') {
+      $env:PRMPT_EVENT   = 'UserPromptSubmit'
+      $env:PRMPT_TIMEOUT = '5'
+      $env:PRMPT_MATCHER = ''
+      $env:PRMPT_HOOK    = $PromptHook
+      $env:PRMPT_BACKUP  = '0'
+      if ((Invoke-NodeScript -Script $MergeJs) -eq 0) {
+        Write-Ok "             + UserPromptSubmit (fetches the status-line slot)"
+      }
+
+      $env:PRMPT_CFG    = $t.Cfg
+      $env:PRMPT_HOOK   = $StatusHook
+      $env:PRMPT_STATE  = $StateFile
+      $env:PRMPT_BACKUP = '0'
+      if ((Invoke-NodeScript -Script $StatusJs) -eq 0) {
+        if (Test-Path $StateFile) {
+          Write-Ok "             + statusLine (wrapping the one you already had)"
+        } else {
+          Write-Ok "             + statusLine"
+        }
+      }
+    }
   }
 }
 
