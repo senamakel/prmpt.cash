@@ -292,7 +292,7 @@ one thing to write down, and they import into either wallet unchanged.
 
 It signs in with those keys itself, which is what makes first run self-service:
 Sign-In With Solana asks the server for a one-time challenge, signs the exact
-message it minted, and gets back a publisher JWT. The Base address is then
+message it minted, and gets back a user JWT. The Base address is then
 proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
 
