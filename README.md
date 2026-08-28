@@ -90,7 +90,8 @@ https://prmpt.cash/7q
 
 The headline is rewritten for *your* turn rather than being boilerplate. That
 impression is billed and credited to you the moment it is served. The link is our
-own redirect: it records the click, pays you again, and 302s to the advertiser.
+own redirect: it records the click and 302s to the advertiser. The click is what
+the advertiser bought the impression for; the impression is what pays you.
 
 Works on Claude Code, Codex, Gemini CLI and Amp out of the box — each of them can
 hand a hook the finished turn and show the answer back to you. †Cursor supplies the
@@ -171,21 +172,19 @@ from somewhere else; the renderer reads that file and prints one row.
 
 **You are paid for being shown an ad, not for reacting to one.** That is the whole
 difference between this and every "monetize your audience" scheme: there is no
-action you have to take. An advertiser bids a CPM and a CPC, the auction ranks on
-expected value, and the winner pays what it cleared at. **70% of that is yours** when
-the ad is shown, and 70% of the click price on top if it is ever clicked.
+action you have to take, and clicking one earns you nothing extra. An advertiser
+bids a CPM — one price, for a thousand impressions — the auction ranks on it, and
+the winner pays what it cleared at. **70% of that is yours** when the ad is shown.
 
-**How much, honestly:** one impression is worth a fraction of a cent, and a click is
-worth meaningfully more than one. This is beer money that arrives while you work,
-not an income — and the daily cap below says out loud where the ceiling is. We would
-rather you find that out here than after a month of watching a balance.
+**How much, honestly:** one impression is worth a fraction of a cent. This is beer
+money that arrives while you work, not an income — and the daily cap below says out
+loud where the ceiling is. We would rather you find that out here than after a month
+of watching a balance.
 
-**Impressions accrue; clicks settle immediately.** A single status-line impression
-is worth a fraction of a cent, and sending a fraction of a cent on-chain costs more
-than it is worth. So impression earnings accumulate and only mint a payout once they
-cross **$1.00**. A click skips the threshold and settles on its own. Either way the
-lifetime total moves the instant the event happens, so what you earned is visible
-before it is sent.
+**Earnings accrue.** Sending a fraction of a cent on-chain costs more than it is
+worth, so what you earn accumulates and only mints a payout once it crosses
+**$1.00**. The lifetime total moves the instant the impression happens, so what you
+earned is visible before it is sent.
 
 **The balance is kept in dollars.** It is converted to your token only when a payout
 settles, at the price fetched right then, so switching tokens changes what the *next*
