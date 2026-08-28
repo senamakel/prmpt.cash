@@ -407,5 +407,11 @@ Write-Host '  Restart your agent, then just work. Most turns match nothing and p
 Write-Host '  nothing. On a match you get one labelled line; a click pays 70% of the'
 Write-Host '  clearing price to your wallet in USDC.'
 Write-Host ''
+# Mirrors install.sh: the link printed by the login above expires in two
+# minutes, so the durable instruction is the command.
+Write-Host "  Finish setup: node $Cli onboard"
+Write-Host '                Connect a GitHub or X account to lift the daily earnings'
+Write-Host '                cap, and pick which token you are paid in.'
+Write-Host ''
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"
