@@ -599,7 +599,7 @@ test('without a token the installer prints the onboarding command and calls noth
   const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
 
   assert.equal(res.code, 0, res.stderr);
-  assert.ok(/Finish setup:.*onboard/s.test(res.stdout), res.stdout);
+  assert.ok(/Open it with:.*onboard/s.test(res.stdout), res.stdout);
 });
 
 test('an install onto an existing token opens the setup page itself', async () => {
@@ -650,7 +650,7 @@ test('--no-onboard leaves the setup page alone', async () => {
 
     assert.equal(res.code, 0, res.stderr);
     assert.equal(stub.hits, 0, 'nothing should have been minted');
-    assert.ok(/Finish setup:.*onboard/s.test(res.stdout), res.stdout);
+    assert.ok(/Open it with:.*onboard/s.test(res.stdout), res.stdout);
   } finally {
     await stub.close();
   }
@@ -680,3 +680,16 @@ function webSessionStub() {
     });
   });
 }
+
+test('the run is presented as three numbered steps, in order', async () => {
+  // What it is, where it goes, and the hand-off to the web. The order is the
+  // contract: nothing is fetched or written before the person piping this into
+  // sh has read what it does and said where it may go.
+  const box = sandbox();
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+
+  assert.equal(res.code, 0, res.stderr);
+  const steps = [...res.stdout.matchAll(/^\[(\d)\/3] (.+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(steps, ['1', '2', '3'], res.stdout);
+  assert.ok(res.stdout.indexOf('[1/3]') < res.stdout.indexOf('What leaves this machine'), res.stdout);
+});
