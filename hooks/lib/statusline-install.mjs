@@ -125,6 +125,59 @@ export function renderCommand() {
   return `node "${path.join(pluginRoot(), 'hooks', 'statusline.mjs')}"`;
 }
 
+/**
+ * The UserPromptSubmit hook that fetches something fresher for the row.
+ *
+ * Part of THIS surface, not of the default install: it exists only to fill the
+ * status-line slot, so wiring it without a status line would send keywords
+ * derived from somebody's prompt for an ad that had nowhere to appear.
+ * install.sh --statusline writes the same pair.
+ */
+export function fetchCommand() {
+  return `node "${path.join(pluginRoot(), 'hooks', 'prompt-start.mjs')}"`;
+}
+
+/** Recognises the fetch hook, ours or a previous version of ours. */
+function isOurFetchHook(entry) {
+  return typeof entry?.command === 'string' && /prompt-start\.mjs/.test(entry.command);
+}
+
+/**
+ * Add our UserPromptSubmit entry, replacing any earlier copy of it.
+ *
+ * Filtering first is what stops a re-install stacking duplicates: the settings
+ * file is the user's and we are one entry in a list that may hold several.
+ */
+function addFetchHook(settings) {
+  const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
+  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
+  const kept = [];
+  for (const group of groups) {
+    if (!Array.isArray(group?.hooks)) { kept.push(group); continue; }
+    const remaining = group.hooks.filter((h) => !isOurFetchHook(h));
+    if (remaining.length) kept.push({ ...group, hooks: remaining });
+  }
+  // Timeout in SECONDS. Claude Code and Gemini CLI differ on the unit and the
+  // two are not interchangeable.
+  kept.push({ hooks: [{ type: 'command', command: fetchCommand(), timeout: 5 }] });
+  settings.hooks = { ...hooks, UserPromptSubmit: kept };
+}
+
+/** Take our UserPromptSubmit entry back out, leaving everybody else's. */
+function removeFetchHook(settings) {
+  const groups = settings.hooks?.UserPromptSubmit;
+  if (!Array.isArray(groups)) return;
+  const kept = [];
+  for (const group of groups) {
+    if (!Array.isArray(group?.hooks)) { kept.push(group); continue; }
+    const remaining = group.hooks.filter((h) => !isOurFetchHook(h));
+    if (remaining.length) kept.push({ ...group, hooks: remaining });
+  }
+  if (kept.length) settings.hooks.UserPromptSubmit = kept;
+  else delete settings.hooks.UserPromptSubmit;
+  if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+}
+
 // --- Claude Code ------------------------------------------------------------
 
 export function claudeStatus() {
@@ -168,6 +221,9 @@ export function installClaude() {
     padding: 0,
   };
 
+  // The surface is both halves, so both go in together.
+  addFetchHook(settings);
+
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
   return { path: file, chained: existing && !isOurs ? existing : null };
@@ -187,6 +243,11 @@ export function uninstallClaude() {
   const chain = readJson(chainPath('claude'));
   if (chain) settings.statusLine = chain;
   else delete settings.statusLine;
+
+  // Both halves came in together and both go out together. Leaving the fetch
+  // hook behind would keep sending prompt keywords for a row that no longer
+  // exists -- the exact trade the user just opted out of.
+  removeFetchHook(settings);
 
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
   try { fs.rmSync(chainPath('claude'), { force: true }); } catch { /* ignore */ }
