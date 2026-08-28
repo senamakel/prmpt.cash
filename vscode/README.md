@@ -97,3 +97,10 @@ esbuild and run the output, so what is asserted is what ships. They cover the
 failure that actually matters — a patched `workbench.js` that does not parse —
 along with re-patch idempotence, stale-marker detection, and that the bridge
 answers on loopback and nowhere else.
+
+## License
+
+GNU General Public License v3.0 or later, the same as the plugin it renders for.
+The full text is in [LICENSE](LICENSE), and it ships inside the `.vsix`.
+
+Copyright (C) 2026 prmpt.cash
