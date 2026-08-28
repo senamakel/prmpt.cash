@@ -243,6 +243,12 @@ test('uninstall gives the status line back', async () => {
   fs.writeFileSync(file, JSON.stringify({ model: 'opus', statusLine: { type: 'command', command: theirs } }));
 
   await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  assert.notEqual(
+    readJSON(file).statusLine.command,
+    theirs,
+    'the installer never took the status line over, so restoring it proves nothing',
+  );
+
   const res = await install(box, ['--uninstall', '--dir', box.dirArg]);
   assert.equal(res.code, 0, res.stderr);
 
