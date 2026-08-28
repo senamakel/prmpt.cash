@@ -299,6 +299,9 @@ function main() {
     const ad = await serveAd(config, {
       installId: config.installId,
       sessionId: config.sessionId,
+      // Which of the two places an ad can appear this is. The other one is the
+      // Claude Code status line, which renders mid-turn and has no turn text.
+      surface: 'TURN_END',
       turnText,
       repoLanguage,
       fileTypes,
