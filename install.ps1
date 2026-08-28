@@ -33,6 +33,7 @@ param(
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
   [switch] $Project,
+  [switch] $StatusLine,
   [switch] $Uninstall
 )
 
@@ -402,8 +403,9 @@ if (Test-Path $cfgFile) {
 #   Gemini CLI   AfterAgent  timeout MILLISECONDS, and wants a matcher
 #   Amp          agent.end   a TypeScript plugin, not a hook at all
 #
-# Claude Code gets two more, because it is the only host with a status line:
-# UserPromptSubmit to fetch, and the statusLine setting to render.
+# Claude Code can have two more, because it is the only host with a status line:
+# UserPromptSubmit to fetch, and the statusLine setting to render. Both are
+# OPT-IN behind -StatusLine, and gated together -- see install.sh for why.
 Write-Host ''
 $scope = if ($Project) { 'project' } else { 'user' }
 Write-Host "Wiring up agents ($scope scope)" -ForegroundColor White
@@ -445,10 +447,11 @@ foreach ($t in $targets) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"
     $configured++
 
-    # Claude Code only. Two further passes over the SAME file, so neither takes
-    # a backup: the one above already captured what the user actually had, and
-    # a second would overwrite it with our own half-finished work.
-    if ($t.Name -eq 'claude') {
+    # Claude Code only, and only when asked for. Two further passes over the
+    # SAME file, so neither takes a backup: the one above already captured what
+    # the user actually had, and a second would overwrite it with our own
+    # half-finished work.
+    if ($t.Name -eq 'claude' -and $StatusLine) {
       $env:PRMPT_EVENT   = 'UserPromptSubmit'
       $env:PRMPT_TIMEOUT = '5'
       $env:PRMPT_MATCHER = ''
@@ -509,5 +512,18 @@ Write-Host "  Finish setup: node $Cli onboard"
 Write-Host '                Connect a GitHub or X account to lift the daily earnings'
 Write-Host '                cap, and pick which token you are paid in.'
 Write-Host ''
+if (-not $StatusLine) {
+  # Mirrors install.sh: the trade-off is the reason this is off, and somebody
+  # deciding to turn it on deserves to know the cost before they do.
+  Write-Host '  Not installed: the status line. The same ad can also sit on the row'
+  Write-Host '  above your prompt while the model works, refreshed from the prompt you'
+  Write-Host '  just typed. It is off because Claude Code hides most of its footer key'
+  Write-Host '  hints -- including "esc to interrupt" -- whenever a custom status line'
+  Write-Host '  is set. That is Claude Code behaviour, not something prmpt chooses.'
+  Write-Host ''
+  Write-Host "  Turn it on:   node $Cli statusline install"
+  Write-Host "                (or re-run this installer with -StatusLine)"
+  Write-Host ''
+}
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"
