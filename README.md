@@ -173,10 +173,10 @@ code path that touches settings, and it is the file people paste into bug
 reports. The key stays out of both blast radii.
 
 The status-line surface keeps two more files there, neither of them secret:
-`statusline.json`, holding the status-line command the installer displaced so it
-can be run and later handed back, and `slot-<session>.json` plus `pending.jsonl`,
-which are one pending decision and the list of ads that have actually been drawn
-and not yet reported. All 0600.
+`statusline-chain-claude.json`, holding the status-line setting the installer
+displaced so it can be run and later handed back, and `slot.json` plus
+`pending.jsonl`, which are the one decision waiting to be drawn and the list of
+ads that have actually been drawn and not yet reported. All 0600.
 
 The token is never echoed, never logged, and never appears in hook output. It
 travels only in the `Authorization: Bearer` header of the serve request.
