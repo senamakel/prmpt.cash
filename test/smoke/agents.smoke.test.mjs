@@ -103,9 +103,12 @@ test('the plugin manifest and the installer agree on every hook', () => {
   const manifest = readJSON(path.join(PLUGIN_DIR, 'hooks', 'hooks.json'));
   const claude = HOSTS.find((h) => h.agent === 'claude');
 
+  // The DEFAULT surface only. The status-line events are opt-in and the
+  // manifest cannot carry the setting that displays them anyway, so declaring
+  // the fetch hook here would send keywords derived from somebody's prompt for
+  // an ad that had nowhere to appear.
   for (const { event, timeout, hook } of [
     { event: claude.event, timeout: claude.timeout, hook: claude.hook },
-    ...claude.extraEvents,
   ]) {
     const groups = manifest.hooks[event];
     assert.ok(Array.isArray(groups), `hooks.json declares no ${event}`);
@@ -117,16 +120,24 @@ test('the plugin manifest and the installer agree on every hook', () => {
 
   assert.deepEqual(
     Object.keys(manifest.hooks).sort(),
-    [claude.event, ...claude.extraEvents.map((e) => e.event)].sort(),
+    [claude.event].sort(),
     'hooks.json and the installer declare different events',
   );
+
+  for (const { event } of claude.statusLineEvents) {
+    assert.equal(
+      manifest.hooks[event],
+      undefined,
+      `hooks.json declares ${event}, which belongs to the opt-in status-line surface`,
+    );
+  }
 });
 
 test('the plugin manifest cannot carry the status line, and says so', () => {
   // A Claude Code plugin declares hooks and nothing else -- statusLine is a
   // settings key, not a hook -- so the /plugin install route gets the
-  // end-of-turn line and the fetch hook but no footer. Better to state that
-  // here than to have somebody discover it as a missing feature.
+  // end-of-turn line and no footer. Better to state that here than to have
+  // somebody discover it as a missing feature.
   const manifest = readJSON(path.join(PLUGIN_DIR, 'hooks', 'hooks.json'));
   assert.equal(manifest.statusLine, undefined);
   assert.ok(
