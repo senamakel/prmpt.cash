@@ -383,3 +383,80 @@ test('status explains why Codex has no status line rather than staying silent', 
   assert.match(res.stdout, /built-in item ids/);
   assert.match(res.stdout, /Stop hook/);
 });
+
+// --- the two opt-in routes must agree ---------------------------------------
+//
+// install.sh --statusline and `prmpt statusline install` are the only two ways
+// to turn this surface on, and install.sh's closing note points at the CLI one.
+// The surface is BOTH halves: the setting that draws the row, and the
+// UserPromptSubmit hook that fetches something fresher to draw. A route that
+// wired only the setting would silently be the parked filler and nothing else.
+
+test('statusline install wires the fetch hook as well as the setting', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const settings = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }));
+
+  const res = await run(CLI, { args: ['statusline', 'install'], env: baseEnv({ HOME: home }) });
+  assert.equal(res.code, 0, res.stderr);
+
+  const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
+  assert.match(after.statusLine.command, /statusline\.mjs/, 'the setting was not written');
+
+  const entries = (after.hooks?.UserPromptSubmit ?? []).flatMap((g) => g.hooks ?? []);
+  assert.equal(entries.length, 1, 'the fetch hook was not wired');
+  assert.match(entries[0].command, /prompt-start\.mjs/);
+  assert.equal(entries[0].timeout, 5, 'Claude Code timeouts are in seconds');
+  assert.equal(after.model, 'opus', 'unrelated settings were lost');
+});
+
+test('statusline uninstall removes the fetch hook it added', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const settings = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }));
+
+  const env = baseEnv({ HOME: home });
+  await run(CLI, { args: ['statusline', 'install'], env });
+  await run(CLI, { args: ['statusline', 'uninstall'], env });
+
+  const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
+  assert.equal('statusLine' in after, false, 'the setting survived uninstall');
+  const entries = (after.hooks?.UserPromptSubmit ?? []).flatMap((g) => g.hooks ?? []);
+  assert.equal(entries.length, 0, 'the fetch hook survived uninstall');
+  assert.equal(after.model, 'opus', 'unrelated settings were lost');
+});
+
+test('re-running statusline install does not stack duplicate fetch hooks', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const settings = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  fs.writeFileSync(settings, JSON.stringify({}));
+
+  const env = baseEnv({ HOME: home });
+  for (let i = 0; i < 3; i++) await run(CLI, { args: ['statusline', 'install'], env });
+
+  const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
+  const entries = (after.hooks?.UserPromptSubmit ?? []).flatMap((g) => g.hooks ?? []);
+  assert.equal(entries.length, 1, `three installs left ${entries.length} fetch hooks`);
+});
+
+test("statusline uninstall leaves somebody else's UserPromptSubmit hook alone", async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const settings = path.join(home, '.claude', 'settings.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  const theirs = { hooks: [{ type: 'command', command: 'echo their-own-hook' }] };
+  fs.writeFileSync(settings, JSON.stringify({ hooks: { UserPromptSubmit: [theirs] } }));
+
+  const env = baseEnv({ HOME: home });
+  await run(CLI, { args: ['statusline', 'install'], env });
+  await run(CLI, { args: ['statusline', 'uninstall'], env });
+
+  const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
+  assert.deepEqual(after.hooks.UserPromptSubmit, [theirs], 'we removed a hook that was not ours');
+});
