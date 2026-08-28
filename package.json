@@ -1,6 +1,6 @@
 {
   "name": "prmpt",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "End-of-reply sponsored-line hook for coding agents. Earn free crypto when someone clicks: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
   "license": "MIT",
   "type": "module",
