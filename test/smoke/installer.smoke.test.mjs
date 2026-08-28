@@ -15,6 +15,7 @@ import {
   AMP_PLUGIN,
   HOSTS,
   PLUGIN_DIR,
+  STATUSLINE_STATE,
   agentFreePath,
   entriesFor,
   exec,
@@ -81,9 +82,27 @@ test('a forced install wires up every host with its own event and timeout unit',
     assert.equal(entry.matcher, host.matcher, `${host.label}: wrong matcher`);
     assert.ok(entry.command.includes('turn-end.mjs'), `${host.label}: command does not run the hook`);
 
-    // No other event was touched. A hook on the wrong event never fires.
-    const otherEvents = Object.keys(config.hooks ?? {}).filter((e) => e !== host.event);
-    assert.deepEqual(otherEvents, [], `${host.label}: unexpected extra events ${otherEvents}`);
+    // Claude Code's status-line surface needs a second hook, on a second
+    // event, and nothing else here has one. Every event in the file must be
+    // one this host declares -- a hook on an event the host does not fire is
+    // indistinguishable from no hook at all.
+    for (const extra of host.extraEvents) {
+      const entries = ourEntries(config, extra.event);
+      assert.equal(
+        entries.length,
+        1,
+        `${host.label}: expected exactly one entry under ${extra.event}`,
+      );
+      assert.equal(entries[0].timeout, extra.timeout, `${host.label}: wrong ${extra.event} timeout`);
+      assert.equal(entries[0].matcher, extra.matcher, `${host.label}: wrong ${extra.event} matcher`);
+      assert.ok(
+        entries[0].command.includes(extra.hook),
+        `${host.label}: ${extra.event} does not run ${extra.hook}`,
+      );
+    }
+    const declared = [host.event, ...host.extraEvents.map((e) => e.event)].sort();
+    const written = Object.keys(config.hooks ?? {}).sort();
+    assert.deepEqual(written, declared, `${host.label}: unexpected events ${written}`);
   }
 
   // Amp is a copied plugin file, not a hook entry.
@@ -103,16 +122,148 @@ test('the recorded command is executable by this platform', async () => {
   await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
 
   for (const host of HOSTS) {
-    const [entry] = ourEntries(readJSON(hostConfigPath(box, host)), host.event);
-    const res = await runRecorded(entry.command, {
-      env: smokeEnv(box.home),
-      stdin: JSON.stringify({ hook_event_name: host.event }),
-    });
-    // No API key is configured, so the correct behaviour is fail-open silence.
-    assert.equal(res.code, 0, `${host.label}: recorded command exited ${res.code}: ${res.stderr}`);
-    assert.equal(res.stdout, '', `${host.label}: recorded command printed to stdout`);
-    assert.equal(res.stderr, '', `${host.label}: recorded command printed to stderr`);
+    const config = readJSON(hostConfigPath(box, host));
+    for (const { event } of [{ event: host.event }, ...host.extraEvents]) {
+      const [entry] = ourEntries(config, event);
+      const res = await runRecorded(entry.command, {
+        env: smokeEnv(box.home),
+        stdin: JSON.stringify({ hook_event_name: event, prompt: 'anything at all' }),
+      });
+      // No API key is configured, so the correct behaviour is fail-open silence.
+      assert.equal(res.code, 0, `${host.label} ${event}: exited ${res.code}: ${res.stderr}`);
+      assert.equal(res.stdout, '', `${host.label} ${event}: printed to stdout`);
+      assert.equal(res.stderr, '', `${host.label} ${event}: printed to stderr`);
+    }
   }
+});
+
+// --- the status line --------------------------------------------------------
+//
+// The second ad surface, and the only one that has to share its real estate
+// with something the user already built. Claude Code only: nothing else here
+// has a footer that renders while the model is working.
+
+/** The Claude Code row, which is the only one with a status line. */
+const CLAUDE = HOSTS.find((h) => h.agent === 'claude');
+
+/** A stand-in for the status line somebody already had, as a runnable command. */
+function priorStatusLine(box, text) {
+  const file = path.join(box.home, 'their-statusline.mjs');
+  fs.writeFileSync(file, `process.stdout.write(${JSON.stringify(text)});\n`);
+  return `"${process.execPath}" "${shellPath(file)}"`;
+}
+
+test('the status line is wired up for Claude Code and for nobody else', async () => {
+  const box = sandbox();
+  await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+
+  const claude = readJSON(hostConfigPath(box, CLAUDE));
+  assert.equal(claude.statusLine?.type, 'command', 'no statusLine was recorded');
+  assert.ok(
+    claude.statusLine.command.includes(CLAUDE.statusLine),
+    `statusLine does not run ${CLAUDE.statusLine}: ${claude.statusLine.command}`,
+  );
+
+  for (const host of HOSTS.filter((h) => !h.statusLine)) {
+    const config = readJSON(hostConfigPath(box, host));
+    assert.equal(config.statusLine, undefined, `${host.label} has no status line to wire up`);
+  }
+});
+
+test('the recorded status-line command runs and prints one line', async () => {
+  const box = sandbox();
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const { command } = readJSON(hostConfigPath(box, CLAUDE)).statusLine;
+
+  const res = await runRecorded(command, {
+    env: smokeEnv(box.home),
+    stdin: JSON.stringify({ session_id: 'smoke-session', model: { display_name: 'Opus' } }),
+  });
+  // No slot is parked, so the honest output is nothing at all.
+  assert.equal(res.code, 0, `status line exited ${res.code}: ${res.stderr}`);
+  assert.equal(res.stderr, '', 'the status line wrote to stderr');
+  assert.equal(res.stdout, '', 'the status line invented output with no ad to show');
+});
+
+test("an existing status line is wrapped, not replaced", async () => {
+  // Silently replacing a status line somebody built is the fastest possible
+  // way to be uninstalled, and the user would be right.
+  const box = sandbox();
+  const file = hostConfigPath(box, CLAUDE);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const theirs = priorStatusLine(box, 'my-repo (main) 41% left');
+  fs.writeFileSync(file, JSON.stringify({ statusLine: { type: 'command', command: theirs } }));
+
+  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+
+  const state = readJSON(path.join(box.home, ...STATUSLINE_STATE));
+  assert.equal(state.wrapped, theirs, 'their command was not recorded');
+
+  const { command } = readJSON(file).statusLine;
+  const ran = await runRecorded(command, {
+    env: smokeEnv(box.home),
+    stdin: JSON.stringify({ session_id: 'smoke-session' }),
+  });
+  assert.equal(ran.code, 0, ran.stderr);
+  assert.equal(
+    ran.stdout.trimEnd(),
+    'my-repo (main) 41% left',
+    'their status line stopped being rendered',
+  );
+});
+
+test('re-running the installer never wraps our own command', async () => {
+  // The second run sees OUR command sitting in statusLine. Recording that as
+  // "the thing to wrap" would fork a copy of the renderer on every render.
+  const box = sandbox();
+  const file = hostConfigPath(box, CLAUDE);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const theirs = priorStatusLine(box, 'my-repo (main)');
+  fs.writeFileSync(file, JSON.stringify({ statusLine: { type: 'command', command: theirs } }));
+
+  for (let i = 0; i < 3; i++) {
+    const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+    assert.equal(res.code, 0, res.stderr);
+  }
+
+  const state = readJSON(path.join(box.home, ...STATUSLINE_STATE));
+  assert.equal(state.wrapped, theirs, `three runs recorded: ${state.wrapped}`);
+  assert.ok(
+    !state.wrapped.includes(CLAUDE.statusLine),
+    'the installer recorded our own command as the one to wrap',
+  );
+});
+
+test('uninstall gives the status line back', async () => {
+  const box = sandbox();
+  const file = hostConfigPath(box, CLAUDE);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const theirs = priorStatusLine(box, 'my-repo (main)');
+  fs.writeFileSync(file, JSON.stringify({ model: 'opus', statusLine: { type: 'command', command: theirs } }));
+
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const res = await install(box, ['--uninstall', '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+
+  const after = readJSON(file);
+  assert.equal(after.statusLine?.command, theirs, 'their status line was not restored');
+  assert.equal(after.model, 'opus', 'the rest of the config was lost');
+  assert.equal(ourEntries(after, 'UserPromptSubmit').length, 0, 'the prompt hook survived uninstall');
+});
+
+test('uninstall removes a status line we added where there was none', async () => {
+  const box = sandbox();
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const file = hostConfigPath(box, CLAUDE);
+  assert.ok(readJSON(file).statusLine, 'nothing was installed to remove');
+
+  await install(box, ['--uninstall', '--dir', box.dirArg]);
+  assert.equal(
+    readJSON(file).statusLine,
+    undefined,
+    'a status line the user never had was left behind',
+  );
 });
 
 test('installing into a path containing a space still produces a runnable command', async () => {
