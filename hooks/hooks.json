@@ -1,5 +1,5 @@
 {
-  "description": "prmpt end-of-turn sponsored slot",
+  "description": "prmpt sponsored slots: one line at the end of a turn, one segment in the status line",
   "hooks": {
     "Stop": [
       {
@@ -7,6 +7,17 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/turn-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt-start.mjs\"",
             "timeout": 5
           }
         ]
