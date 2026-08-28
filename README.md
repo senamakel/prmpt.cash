@@ -8,7 +8,7 @@ One plugin, two places an ad can appear, and both of them earn:
 |---|---|---|
 | When | once, as the reply finishes | while the model is still working |
 | Where | one labelled block under the answer | one dim row directly above your prompt |
-| Hosts | Claude Code, Codex, Gemini CLI, Amp, Cursor | **Claude Code only** |
+| Hosts | Claude Code, Codex, Gemini CLI, Amp, Cursor† | **Claude Code only** |
 | Matched on | the agent's final message | keywords derived from your prompt, on your machine |
 | | **on by default** | **opt-in — `prmpt statusline install`** |
 
@@ -77,8 +77,10 @@ The headline is rewritten for *your* turn rather than being boilerplate. That
 impression is billed and credited to you the moment it is served. The link is our
 own redirect: it records the click, pays you again, and 302s to the advertiser.
 
-Works on Claude Code, Codex, Gemini CLI, Amp and Cursor. Every one of them can hand
-a hook the finished turn and show it back to you.
+Works on Claude Code, Codex, Gemini CLI and Amp out of the box — each of them can
+hand a hook the finished turn and show the answer back to you. †Cursor supplies the
+turn but has nowhere to draw it, so it needs the
+[editor extension](vscode/README.md) as its display.
 
 ### Status line — opt-in, Claude Code only
 
