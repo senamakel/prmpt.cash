@@ -40,11 +40,20 @@ export function strip(content: string): string {
   let c = content;
   const idx = c.search(ANY_MARKER);
   if (idx >= 0) c = `${c.slice(0, idx).trimEnd()}\n`;
-  c = c.replace(
-    /performance\.mark\("code\/didLoadWorkbenchMain"\),B\.main\(S\),[^}]+\}\)\(\);/,
+
+  // Exact first: HOOKED is a constant we generate, so a literal swap is precise
+  // and cannot mis-fire on a file we did not patch.
+  if (c.includes(HOOKED)) return c.split(HOOKED).join(HOOK);
+
+  // Fallback for a hook written by an older version whose replacement text
+  // differed. Note `[\s\S]*?` rather than `[^}]+`: the injected call contains
+  // braces, so a negated-brace class stops at the first one and silently fails
+  // to strip anything -- which leaves the bootstrap calling an entry point that
+  // the same operation just deleted.
+  return c.replace(
+    /performance\.mark\("code\/didLoadWorkbenchMain"\),B\.main\(S\),[\s\S]*?\}\)\(\);/,
     HOOK,
   );
-  return c;
 }
 
 /** Whether this build of Cursor still has the shape the patch needs. */
