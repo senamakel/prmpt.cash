@@ -1,4 +1,5 @@
 node_modules/
+coverage/
 *.log
 .DS_Store
 # Real environment files. .env.example is the template and is committed.

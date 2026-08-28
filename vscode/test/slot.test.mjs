@@ -15,7 +15,8 @@ import { build } from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prmpt-vsc-slot-'));
+const outDir = path.join(root, 'test', '.compiled');
+fs.mkdirSync(outDir, { recursive: true });
 
 let slot;
 let bridge;
@@ -28,6 +29,7 @@ before(async () => {
       format: 'esm',
       platform: 'node',
       outfile: path.join(outDir, `${name}.mjs`),
+      sourcemap: 'inline',
       logLevel: 'silent',
     });
   }
