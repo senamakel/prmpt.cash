@@ -22,6 +22,13 @@ import {
 } from './helpers.mjs';
 
 const STATUSLINE = path.join(PLUGIN_DIR, 'hooks', 'statusline.mjs');
+
+/** What a human actually sees: the row with OSC 8 and SGR escapes stripped. */
+function visible(s) {
+  return s
+    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '')
+    .replace(/\x1b\[[0-9;]*m/g, '');
+}
 const TURN_END = path.join(PLUGIN_DIR, 'hooks', 'turn-end.mjs');
 const CLI = path.join(PLUGIN_DIR, 'bin', 'prmpt.mjs');
 
@@ -111,7 +118,7 @@ test('renders one labelled line and nothing else', async () => {
   });
   assert.equal(res.code, 0);
   assert.equal(res.stderr, '');
-  const lines = res.stdout.trimEnd().split('\n');
+  const lines = visible(res.stdout).trimEnd().split('\n');
   assert.equal(lines.length, 1, 'the status line is permanent -- one row only');
   assert.match(lines[0], /^Sponsored · /);
   assert.match(lines[0], /Widget CI/);
@@ -127,7 +134,7 @@ test('the line is wrapped in an OSC 8 hyperlink rather than printing the URL', a
   });
   assert.match(res.stdout, /\x1b\]8;;https:\/\/ads\.example\/c\/req_abc123\x1b\\/);
   assert.ok(
-    !res.stdout.replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '').includes('https://'),
+    !visible(res.stdout).includes('https://'),
     'the raw URL must not appear as visible text on a permanent row',
   );
 });
@@ -143,10 +150,8 @@ test('it never wraps: the visible line fits the terminal width', async () => {
       env: baseEnv({ HOME: home, COLUMNS: cols }),
       stdin: '{}',
     });
-    const visible = res.stdout.trimEnd()
-      .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, '')
-      .replace(/\x1b\[[0-9;]*m/g, '');
-    assert.ok(visible.length <= Number(cols), `${visible.length} > ${cols}: "${visible}"`);
+    const row = visible(res.stdout).trimEnd();
+    assert.ok(row.length <= Number(cols), `${row.length} > ${cols}: "${row}"`);
   }
 });
 
@@ -213,7 +218,7 @@ test("a pre-existing status line is kept, and ours sits beneath it", async () =>
     env: baseEnv({ HOME: home, CLAUDECODE: '1' }),
     stdin: '{}',
   });
-  const lines = res.stdout.trimEnd().split('\n');
+  const lines = visible(res.stdout).trimEnd().split('\n');
   assert.equal(lines.length, 2);
   assert.equal(lines[0], 'my own status line');
   assert.match(lines[1], /^Sponsored · /);
@@ -232,7 +237,7 @@ test('a broken chained command does not take our line down with it', async () =>
   });
   assert.equal(res.code, 0);
   assert.equal(res.stderr, '');
-  assert.match(res.stdout, /^Sponsored · /);
+  assert.match(visible(res.stdout), /^Sponsored · /);
 });
 
 test('in single-row hosts a chained status line wins over the ad', async () => {
@@ -249,7 +254,7 @@ test('in single-row hosts a chained status line wins over the ad', async () => {
     env: baseEnv({ HOME: home }),
     stdin: '',
   });
-  assert.equal(res.stdout.trimEnd(), 'my own status line');
+  assert.equal(visible(res.stdout).trimEnd(), 'my own status line');
 });
 
 // --- installing -------------------------------------------------------------
