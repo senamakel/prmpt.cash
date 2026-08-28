@@ -58,6 +58,16 @@ test('fenced code blocks are removed before tokenising', () => {
   }
 });
 
+test('an unterminated fence takes everything after it', () => {
+  // A prompt that opens a code block and never closes it is common -- the
+  // paste got truncated, or the model is mid-sentence. Treating the remainder
+  // as prose would ship the whole snippet.
+  const tokens = signalTokens('look at this\n```js\nconst apiSecret = "hunter2";\n');
+  assert.ok(tokens.includes('look'));
+  assert.ok(!tokens.includes('apisecret'));
+  assert.ok(!tokens.includes('hunter2'));
+});
+
 test('inline code spans are removed before tokenising', () => {
   const tokens = signalTokens('why does `SUPER_SECRET_VALUE` break the build');
   assert.ok(tokens.includes('build'));
