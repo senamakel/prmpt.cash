@@ -23,7 +23,7 @@ One plugin, two places an ad can appear, and both of them earn:
 | | **on by default** | **opt-in — `prmpt statusline install`** |
 
 Earnings go straight to a wallet on your own machine, in whichever token you picked
-— USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana. The installer creates
+— USDC, BTC or ETH on Base, or SOL, TINY or ANT on Solana. The installer creates
 that wallet for you, so there is no account and no key to paste.
 
 It stays quiet. Most turns match nothing and print nothing, one line is the entire
@@ -269,16 +269,52 @@ git clone https://github.com/senamakel/prmpt.cash
 <summary>Options</summary>
 
 ```
+-y, --yes            skip the picker and wire up every host that is present
 --no-login           install and wire up the agents, but create no wallet
---statusline         also install the Claude Code status-line surface
+--no-onboard         do not open the setup page in a browser at the end
 --version <tag>      install a specific release, e.g. v0.3.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
+--statusline         also draw the ad on Claude Code's status line
+--editor             also install the VS Code / Cursor extension
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
 --project            configure ./ instead of your home directory
 --uninstall          remove the hooks and the installed copy
 ```
 </details>
+
+The install is three steps. **Step 1** says what it does before it does any of
+it: what leaves the machine (the final text of a finished turn, nothing else),
+what it costs (one request, a hard 1.5s budget, fails open and silent), what you
+earn, and how to switch it off.
+
+**Step 2** asks where it should go, before it fetches or writes anything.
+Everything is ticked — Enter installs the lot, including hosts you have not
+installed yet, which are wired up so they work the day you do. Untick by number:
+
+```
+  [x] 1. Claude Code   Stop -- the line at the end of a turn
+  [x] 2.   status line the same ad above your prompt while it thinks
+  [x] 3. Codex         Stop -- the line at the end of a turn
+  [x] 4. Gemini CLI    AfterAgent -- the line at the end of a turn  (not found)
+  ...
+  Number to toggle, a all, n none, Enter to install, q to quit:
+```
+
+The one row worth a second look is the status line: Claude Code hides most of
+its footer key hints, `esc to interrupt` among them, whenever a custom status
+line is set. That is Claude Code's behaviour, not prmpt's — untick 2 to keep
+them.
+
+It reads `/dev/tty`, not stdin, so it works under `curl ... | sh` where stdin is
+the script itself. Pass `--agents` or `-y` and it never appears — a Dockerfile,
+CI or a provisioning script takes exactly the path it always did.
+
+**Step 3** opens your account on the web, already signed in, where the rest of
+setup lives: pick which token you are paid in, and connect a GitHub or X account
+to lift the daily earnings cap. Your keys never leave the machine — the browser
+gets a single-use code, not the wallet. That code expires in two minutes;
+`prmpt onboard` mints a fresh one whenever you want it.
 
 Re-running is safe. It upgrades in place, and replaces its own hook entry rather
 than appending, so you cannot end up with duplicates.

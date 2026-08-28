@@ -78,6 +78,8 @@ usage: prmpt <command> [options]
   login [--endpoint <url>]   Create a wallet if there isn't one, prove it to the
                              backend, and store the token. Safe to re-run: it
                              refreshes an expiring token without touching the key.
+                             Ends by opening the onboarding page; --no-open
+                             prints the link instead, --no-onboard skips it.
   status                     Wallet, token and endpoint for this install.
   logout                     Forget the token. The wallet file is left alone.
 
@@ -200,7 +202,13 @@ async function cmdLogin(args) {
   out('it expires. Treat the config file as a credential.');
   out('');
 
-  await handOffToOnboarding({ endpoint, token: result.token, open: !args.includes('--no-open') });
+  // --no-onboard exists for the installer, which does this itself at the very
+  // end of its run. Minting the code here would be worse than useless there:
+  // it lives two minutes, and the installer still has agents to wire and a
+  // screenful of output to print before the user is looking at anything.
+  if (!args.includes('--no-onboard')) {
+    await handOffToOnboarding({ endpoint, token: result.token, open: !args.includes('--no-open') });
+  }
 }
 
 /**
