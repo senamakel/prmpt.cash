@@ -8,6 +8,7 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -42,7 +43,7 @@ test('--help exits 0 and documents every flag', async () => {
   const box = sandbox();
   const res = await install(box, ['--help']);
   assert.equal(res.code, 0, res.stderr);
-  for (const flag of ['--no-login', '--version', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
+  for (const flag of ['--no-login', '--no-onboard', '--yes', '--version', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
     assert.ok(res.stdout.includes(flag), `--help does not mention ${flag}`);
   }
 });
@@ -564,3 +565,118 @@ test('with no agents selected and none present, the installer says so and fails'
   assert.notEqual(res.code, 0, 'configuring nothing should not report success');
   assert.ok(/no agents were configured/.test(res.stderr), res.stderr);
 });
+
+// --- the picker, and the setup link -----------------------------------------
+
+test('an install with no terminal never draws the picker or waits for input', async () => {
+  // The picker reads /dev/tty, not stdin, precisely so `curl ... | sh` works.
+  // The other half of that bargain is that a run with no terminal at all --
+  // CI, a Dockerfile, this suite -- must not stop and ask. A blocking prompt
+  // here would hang every automated install rather than fail it, which is the
+  // worst shape a regression can take.
+  const box = sandbox();
+  const res = await install(box, ['--dir', box.dirArg], { env: { PATH: agentFreePath() } });
+
+  assert.ok(!/Where should prmpt install itself/.test(res.stdout), res.stdout);
+  assert.ok(!res.timedOut, 'the installer blocked waiting for input');
+});
+
+test('--agents skips the picker and says a host was not selected, not missing', async () => {
+  const box = sandbox();
+  const res = await install(box, ['--agents', 'codex', '--dir', box.dirArg]);
+
+  assert.equal(res.code, 0, res.stderr);
+  assert.ok(!/Where should prmpt install itself/.test(res.stdout), res.stdout);
+  // "not found" would be a lie about a host that was simply not asked for.
+  assert.ok(/Claude Code not selected/.test(res.stdout), res.stdout);
+});
+
+test('without a token the installer prints the onboarding command and calls nothing', async () => {
+  // PRMPT_NO_LOGIN is set for the whole suite, so there is no config.json and
+  // no token to mint a session code from. The durable instruction is all there
+  // is to give.
+  const box = sandbox();
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+
+  assert.equal(res.code, 0, res.stderr);
+  assert.ok(/Finish setup:.*onboard/s.test(res.stdout), res.stdout);
+});
+
+test('an install onto an existing token opens the setup page itself', async () => {
+  // The bug this closes: a re-install skips login entirely, so nothing ever
+  // minted a link and the user was left to discover `prmpt onboard` on their
+  // own. The link is minted HERE, at the end, and not by the login step, where
+  // the two-minute code would expire during the agent wiring that follows.
+  const box = sandbox();
+  const configDir = path.join(box.home, '.config', 'prmpt');
+  fs.mkdirSync(configDir, { recursive: true });
+
+  const stub = await webSessionStub();
+  try {
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
+      token: 'header.eyJ0eXAiOiJwdWJsaXNoZXIifQ.signature',
+      installId: 'install-1',
+      endpoint: stub.endpoint,
+    }));
+
+    const res = await install(box, [
+      '--agents', ALL_AGENTS, '--dir', box.dirArg, '--endpoint', stub.endpoint,
+    ]);
+
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(stub.hits, 1, `expected exactly one createWebSession, got ${stub.hits}`);
+    assert.ok(res.stdout.includes('https://prmpt.cash/s/smoke?next=%2Fonboarding'), res.stdout);
+  } finally {
+    await stub.close();
+  }
+});
+
+test('--no-onboard leaves the setup page alone', async () => {
+  const box = sandbox();
+  const configDir = path.join(box.home, '.config', 'prmpt');
+  fs.mkdirSync(configDir, { recursive: true });
+
+  const stub = await webSessionStub();
+  try {
+    fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
+      token: 'header.eyJ0eXAiOiJwdWJsaXNoZXIifQ.signature',
+      installId: 'install-1',
+      endpoint: stub.endpoint,
+    }));
+
+    const res = await install(box, [
+      '--agents', ALL_AGENTS, '--dir', box.dirArg, '--endpoint', stub.endpoint, '--no-onboard',
+    ]);
+
+    assert.equal(res.code, 0, res.stderr);
+    assert.equal(stub.hits, 0, 'nothing should have been minted');
+    assert.ok(/Finish setup:.*onboard/s.test(res.stdout), res.stdout);
+  } finally {
+    await stub.close();
+  }
+});
+
+/** A backend that answers exactly one operation: createWebSession. */
+function webSessionStub() {
+  const state = { hits: 0 };
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      if (body.includes('createWebSession')) state.hits += 1;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        data: { createWebSession: { code: 'smoke', url: 'https://prmpt.cash/s/smoke', expiresAt: null } },
+      }));
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({
+        endpoint: `http://127.0.0.1:${server.address().port}/graphql`,
+        get hits() { return state.hits; },
+        close: () => new Promise((done) => server.close(done)),
+      });
+    });
+  });
+}
