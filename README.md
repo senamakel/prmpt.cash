@@ -332,7 +332,8 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
   about as long as an exit.
 - **Neither is updating.** The daily update check costs the turn a `stat()` and
   a `spawn()`. The download happens in a detached child, or not at all.
-- **`UserPromptSubmit` blocks you**, so it does no network work at all: it
+- **`UserPromptSubmit` blocks you** — when you have opted into the status line;
+  it is not wired otherwise — so it does no network work at all: it
   derives keywords, hands them to a detached child and exits. Measured at well
   under a tenth of a second.
 - **The status-line command never touches the network.** It reads one small file
@@ -356,9 +357,10 @@ what the match runs against.
 end-of-turn request already returned, re-displayed from a local file. No second
 request is made and no new data leaves the machine.
 
-**For the prompt-fetched ad on the status line:** there is no reply yet — the ad
-renders while the model is still working — so the match runs against a handful of
-keywords derived from your prompt **on your machine**, by
+**For the prompt-fetched ad on the status line** — which exists only if you
+turned the status line on, and does not exist on a default install: there is no
+reply yet — the ad renders while the model is still working — so the match runs
+against a handful of keywords derived from your prompt **on your machine**, by
 [`hooks/lib/tokens.mjs`](hooks/lib/tokens.mjs). What is transmitted is that list
 and nothing else.
 
@@ -378,10 +380,13 @@ text you typed, and there is a test that asserts a phrase from the prompt is
 nowhere in the request body.
 
 That is a real reduction, not anonymity: individual words you typed do leave the
-machine. If that is not a trade you want, `PRMPT_DISABLED=1` turns everything
-off, and removing the `UserPromptSubmit` entry from `~/.claude/settings.json`
-turns off only the prompt-fetched path, leaving the end-of-turn line — and the
-parked ad on the status line, which sends nothing — working.
+machine. It is also why the status line is opt-in: on a default install this
+path does not run at all, and nothing beyond the end-of-turn message is ever
+sent. If you turned it on and it is not a trade you want, `prmpt statusline
+uninstall` removes the surface, or removing just the `UserPromptSubmit` entry
+from `~/.claude/settings.json` turns off only the prompt-fetched path, leaving
+the end-of-turn line — and the parked ad on the status line, which sends
+nothing — working. `PRMPT_DISABLED=1` turns everything off.
 
 See [`.env.example`](.env.example) for every knob.
 
@@ -390,8 +395,8 @@ See [`.env.example`](.env.example) for every knob.
 | Agent | Event | Config |
 |---|---|---|
 | Claude Code | `Stop` | `~/.claude/settings.json`, timeout in **seconds** |
-| Claude Code | `UserPromptSubmit` | same file — fetches the status-line slot |
-| Claude Code | `statusLine` | same file — renders it. Wraps an existing command |
+| Claude Code | `UserPromptSubmit` | same file — fetches the status-line slot. **Opt-in** |
+| Claude Code | `statusLine` | same file — renders it. Wraps an existing command. **Opt-in** |
 | Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
 | Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
 | Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
