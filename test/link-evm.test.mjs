@@ -1,6 +1,6 @@
 // Backfilling a Base address onto an install that predates two-chain payouts.
 //
-// Every publisher created before ERC-20 payouts moved to Base has proven only a
+// Every user created before ERC-20 payouts moved to Base has proven only a
 // Solana address, so anything owed in USDC — the default — parks unsendable.
 // Self-enrolment cannot fix it: that fires only when there is NO token, and
 // these installs have one. Hence this path, and hence these tests.

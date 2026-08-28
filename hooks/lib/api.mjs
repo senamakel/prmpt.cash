@@ -43,7 +43,7 @@ const SIWS_CHALLENGE = `mutation SiwsChallenge($wallet: String!) {
 
 // Sign-In With Ethereum, for the Base half of the wallet.
 //
-// This is a LINK, not a login: the publisher is already authenticated by the
+// This is a LINK, not a login: the user is already authenticated by the
 // SIWS pair above, and this attaches the second address they hold. Which is why
 // linkEvmWallet needs the token and evmChallenge does not.
 const EVM_CHALLENGE = `mutation EvmChallenge($address: String!) {
@@ -81,7 +81,7 @@ const SIWS_VERIFY = `mutation SiwsVerify($wallet: String!, $nonce: String!, $sig
   siwsVerify(wallet: $wallet, nonce: $nonce, signature: $signature) {
     token
     expiresAt
-    publisher {
+    user {
       installId
       solanaWallet
       evmWallet
@@ -240,9 +240,9 @@ export async function evmChallenge({ endpoint, address, timeoutMs = 15000 }) {
 }
 
 /**
- * Attach the proven Base address to this install's publisher account.
+ * Attach the proven Base address to this install's user account.
  *
- * Needs the publisher token: the backend takes the account from the token and
+ * Needs the user token: the backend takes the account from the token and
  * never from the address, so this can only ever link to us.
  */
 export async function linkEvmWallet({ endpoint, token, address, nonce, signature, timeoutMs = 15000 }) {
@@ -256,7 +256,7 @@ export async function linkEvmWallet({ endpoint, token, address, nonce, signature
 
   const node = data?.linkEvmWallet;
   if (!node || typeof node !== 'object') {
-    throw new Error('prmpt: linkEvmWallet returned no publisher');
+    throw new Error('prmpt: linkEvmWallet returned no user');
   }
   return {
     installId: node.installId ?? null,
@@ -267,7 +267,7 @@ export async function linkEvmWallet({ endpoint, token, address, nonce, signature
   };
 }
 
-/** Mint a one-off code that opens the dashboard as this install's publisher. */
+/** Mint a one-off code that opens the dashboard as this install's user. */
 export async function createWebSession({ endpoint, token, timeoutMs = 15000 }) {
   const data = await graphql({ endpoint, token, query: CREATE_WEB_SESSION, timeoutMs });
 
@@ -309,7 +309,7 @@ export async function siwsChallenge({ endpoint, wallet, timeoutMs = 15000 }) {
 }
 
 /**
- * Hand back the signature and take the publisher JWT.
+ * Hand back the signature and take the user JWT.
  *
  * The nonce is consumed by the backend before the signature is even checked, so
  * a failure here burns the challenge. Retrying means minting a fresh one, which
@@ -330,10 +330,10 @@ export async function siwsVerify({ endpoint, wallet, nonce, signature, timeoutMs
   return {
     token: node.token,
     expiresAt: typeof node.expiresAt === 'string' ? node.expiresAt : null,
-    installId: node.publisher?.installId ?? null,
-    solanaWallet: node.publisher?.solanaWallet ?? null,
-    evmWallet: node.publisher?.evmWallet ?? null,
-    payoutToken: node.publisher?.payoutToken ?? null,
-    payoutChain: node.publisher?.payoutChain ?? null,
+    installId: node.user?.installId ?? null,
+    solanaWallet: node.user?.solanaWallet ?? null,
+    evmWallet: node.user?.evmWallet ?? null,
+    payoutToken: node.user?.payoutToken ?? null,
+    payoutChain: node.user?.payoutChain ?? null,
   };
 }

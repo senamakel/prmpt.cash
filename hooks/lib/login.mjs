@@ -12,7 +12,7 @@ import { writeConfig, resolveInstallId } from './config.mjs';
 /**
  * Prove the local wallet to the backend and persist the resulting JWT.
  *
- * First sign-in IS signup: the backend creates the publisher behind an unseen
+ * First sign-in IS signup: the backend creates the user behind an unseen
  * wallet, exactly as it does for a browser. So this one call takes a machine
  * from "no account at all" to "earning", with no dashboard visit.
  *
@@ -91,7 +91,7 @@ export async function loginWithWallet({ endpoint, timeoutMs = 15000 } = {}) {
 }
 
 /**
- * Prove the Base address to a backend that already knows this publisher.
+ * Prove the Base address to a backend that already knows this user.
  *
  * Resolves rather than rejects on every failure, so the caller can report a
  * half-linked install without losing the login -- see loginWithWallet.
@@ -104,7 +104,7 @@ async function linkEvmAddress({ endpoint, token, evm, timeoutMs }) {
     if (challenge.address.toLowerCase() !== evm.address.toLowerCase()) {
       throw new Error(`the challenge is for ${challenge.address}, not ${evm.address}`);
     }
-    const publisher = await linkEvmWallet({
+    const user = await linkEvmWallet({
       endpoint,
       token,
       address: evm.address,
@@ -115,8 +115,8 @@ async function linkEvmAddress({ endpoint, token, evm, timeoutMs }) {
     return {
       linked: true,
       error: null,
-      payoutToken: publisher.payoutToken,
-      payoutChain: publisher.payoutChain,
+      payoutToken: user.payoutToken,
+      payoutChain: user.payoutChain,
     };
   } catch (err) {
     return { linked: false, error: err?.message ?? String(err), payoutToken: null, payoutChain: null };

@@ -1,7 +1,7 @@
 {
   "name": "prmpt",
   "version": "0.3.0",
-  "description": "End-of-reply sponsored-line hook for coding agents. Earn free crypto when someone clicks: USDC, BTC or ETH on Base, or SOL, TINY or ANT on Solana.",
+  "description": "Get paid to use Claude Code, Codex, Gemini CLI, Amp and Cursor. A zero-dependency hook that earns you 70% of every sponsored line it shows, in USDC, BTC or ETH on Base, or SOL, TINY or ANT on Solana.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "repository": {
@@ -41,6 +41,7 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:smoke": "node --test test/smoke/installer.smoke.test.mjs test/smoke/agents.smoke.test.mjs test/smoke/windows.smoke.test.mjs",
+    "test:e2e:linux": "node --test test/smoke/linux-e2e.smoke.test.mjs",
     "test:all": "npm test && npm run test:smoke"
   }
 }
