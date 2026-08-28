@@ -411,7 +411,7 @@ if ($interactive) {
   # pressing Enter is the whole install, and a host wired before it exists
   # simply works the day it arrives. Detection decides the "(not found)" note,
   # not the box. The status line is ticked too, with its cost spelled out under
-  # the list so it can be untinstalled before it happens rather than after.
+  # the list, so it can be unticked before it happens rather than after.
   $picked = @{}
   foreach ($r in $rows) { $picked[$r.Key] = $true }
 
