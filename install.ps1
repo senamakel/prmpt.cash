@@ -407,12 +407,13 @@ if ($interactive) {
     @{ Key='gemini';     Label='Gemini CLI    AfterAgent -- the line at the end of a turn' },
     @{ Key='amp';        Label='Amp           agent.end -- unverified against a live install' }
   )
-  # Defaults are what an unattended run would have done: every host present,
-  # nothing that is not. The status line stays off even with Claude Code -- it
-  # costs the user their footer key hints, so it is asked for, never assumed.
+  # Everything starts ticked, including hosts that are not installed yet:
+  # pressing Enter is the whole install, and a host wired before it exists
+  # simply works the day it arrives. Detection decides the "(not found)" note,
+  # not the box. The status line is ticked too, with its cost spelled out under
+  # the list so it can be untinstalled before it happens rather than after.
   $picked = @{}
-  foreach ($r in $rows) { $picked[$r.Key] = (Test-HostPresent $r.Key) }
-  $picked['statusline'] = $false
+  foreach ($r in $rows) { $picked[$r.Key] = $true }
 
   while ($true) {
     Write-Host ''
@@ -425,8 +426,10 @@ if ($interactive) {
       Write-Host ("  {0} {1}. {2}{3}" -f $box, ($i + 1), $r.Label, $note)
     }
     Write-Host ''
-    Write-Host '  A status line hides most of Claude Code''s footer key hints, including' -ForegroundColor DarkGray
-    Write-Host '  "esc to interrupt". That is Claude Code behaviour, not prmpt''s.' -ForegroundColor DarkGray
+    Write-Host '  A host that is not there yet is still wired up, so it works the day you' -ForegroundColor DarkGray
+    Write-Host '  install it. A status line hides most of Claude Code''s footer key hints,' -ForegroundColor DarkGray
+    Write-Host '  including "esc to interrupt" -- that is Claude Code behaviour, not prmpt''s.' -ForegroundColor DarkGray
+    Write-Host '  Untick 2 to keep them.' -ForegroundColor DarkGray
     Write-Host ''
     $reply = Read-Host '  Number to toggle, a all, n none, Enter to install, q to quit'
     $reply = ($reply -replace ',', ' ').Trim()
