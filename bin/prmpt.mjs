@@ -38,11 +38,10 @@ import { RELEASE_REPO } from '../hooks/lib/release.mjs';
 import { createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
 import {
   installClaude,
-  installCodex,
   uninstallClaude,
-  uninstallCodex,
   statusAll,
   detectHosts,
+  CLAUDE_TRADE_OFF,
 } from '../hooks/lib/statusline-install.mjs';
 import { readSlot, clearSlot } from '../hooks/lib/slot.mjs';
 import { composeStatusLine } from '../hooks/lib/statusline-render.mjs';
@@ -100,10 +99,11 @@ usage: prmpt <command> [options]
                              prefer 'wallet mnemonic', which covers both chains.
   wallet path                Where the key files live.
 
-  statusline install         Also show the matched ad on the host's status line,
-                             above the prompt, until it ages out. Opt-in: it
-                             edits ~/.claude/settings.json and ~/.codex/config.toml,
-                             chaining any status line you already had.
+  statusline install         Also show the matched ad on Claude Code's status
+                             line, above the prompt, until it ages out. Opt-in:
+                             it edits ~/.claude/settings.json, chaining any
+                             status line you already had. Note that Claude Code
+                             hides its footer key hints while one is set.
                              Also: uninstall, status, preview.
 
   update [--check]           Update this install to the latest GitHub release.
@@ -612,39 +612,30 @@ async function cmdUpdate(args) {
  */
 async function cmdStatusline(args) {
   const sub = args[0] || 'status';
-  const only = args.includes('--claude') ? ['claude']
-    : args.includes('--codex') ? ['codex']
-    : null;
-
-  const wanted = only || detectHosts();
 
   if (sub === 'install') {
-    if (!wanted.length) {
+    if (!detectHosts().length && !args.includes('--force')) {
       throw new UserError(
-        'no supported host found.\n' +
-        "  Looked for ~/.claude and ~/.codex. Pass --claude or --codex to write one anyway.",
+        'Claude Code not found on this machine.\n' +
+        "  Looked for ~/.claude. Pass --force to write the setting anyway.",
       );
     }
-    for (const host of wanted) {
-      const r = host === 'claude' ? installClaude() : installCodex();
-      out(`prmpt: status line installed for ${host === 'claude' ? 'Claude Code' : 'Codex'}`);
-      out(`  ${r.path}`);
-      if (r.chained) out('  your existing status line is kept and rendered above it');
-    }
+    for (const line of CLAUDE_TRADE_OFF) say(`  ${line}`);
     out('');
-    out('Restart your agent to pick it up. Nothing shows until the next turn');
-    out('that actually matches an ad -- the status line renders that decision,');
-    out('it does not fetch one of its own.');
+    const r = installClaude();
+    out(`prmpt: status line installed -- ${r.path}`);
+    if (r.chained) out('  your existing status line is kept and rendered above it');
+    out('');
+    out('Restart Claude Code to pick it up. Nothing shows until a turn actually');
+    out('matches an ad: the status line renders that decision, it never fetches one.');
     return;
   }
 
   if (sub === 'uninstall' || sub === 'remove') {
-    for (const host of wanted.length ? wanted : ['claude', 'codex']) {
-      const r = host === 'claude' ? uninstallClaude() : uninstallCodex();
-      if (!r.changed) {
-        out(`prmpt: nothing of ours in ${r.path}`);
-        continue;
-      }
+    const r = uninstallClaude();
+    if (!r.changed) {
+      out(`prmpt: nothing of ours in ${r.path}`);
+    } else {
       out(`prmpt: status line removed from ${r.path}`);
       if (r.restored) out('  your original status line was put back');
     }
@@ -664,8 +655,12 @@ async function cmdStatusline(args) {
 
   if (sub === 'status') {
     for (const s of statusAll()) {
-      const state = s.installed ? 'installed' : s.present ? 'not installed' : 'host not found';
-      out(`${s.host.padEnd(12)} ${state}`);
+      if (!s.supported) {
+        out(`${s.host.padEnd(12)} not available -- ${s.reason}`);
+        if (s.note) out(`  ${s.note}`);
+        continue;
+      }
+      out(`${s.host.padEnd(12)} ${s.installed ? 'installed' : s.present ? 'not installed' : 'host not found'}`);
       out(`  ${s.path}`);
       if (s.installed && s.chained) out('  chaining your previous status line');
     }
