@@ -612,6 +612,20 @@ if ($Endpoint -ne $DefaultEndpoint) {
 }
 
 Write-Host "  Installed. $configured agent(s) wired up. Restart yours and just work." -ForegroundColor Green
+Write-Host ''
+if (-not $StatusLine) {
+  # Mirrors install.sh: the trade-off is the reason this is off, and somebody
+  # deciding to turn it on deserves to know the cost before they do.
+  Write-Host '  Not installed: the status line. The same ad can also sit on the row'
+  Write-Host '  above your prompt while the model works, refreshed from the prompt you'
+  Write-Host '  just typed. It is off because Claude Code hides most of its footer key'
+  Write-Host '  hints -- including "esc to interrupt" -- whenever a custom status line'
+  Write-Host '  is set. That is Claude Code behaviour, not something prmpt chooses.'
+  Write-Host ''
+  Write-Host "  Turn it on:   node $Cli statusline install"
+  Write-Host "                (or re-run this installer with -StatusLine)"
+  Write-Host ''
+}
 # Mirrors install.sh: finishing setup on the web is part of installing, not a
 # second command to remember. It runs here, last, because the code is single-use
 # and expires in two minutes. Best effort -- the token is already on disk and
@@ -633,20 +647,6 @@ if ($NoOnboard -or -not (Test-Path $cfgFile)) {
     Write-Warn 'could not open the setup page. Run it yourself when you are ready:'
     Write-Warn "  node $Cli onboard"
   }
-}
-Write-Host ''
-if (-not $StatusLine) {
-  # Mirrors install.sh: the trade-off is the reason this is off, and somebody
-  # deciding to turn it on deserves to know the cost before they do.
-  Write-Host '  Not installed: the status line. The same ad can also sit on the row'
-  Write-Host '  above your prompt while the model works, refreshed from the prompt you'
-  Write-Host '  just typed. It is off because Claude Code hides most of its footer key'
-  Write-Host '  hints -- including "esc to interrupt" -- whenever a custom status line'
-  Write-Host '  is set. That is Claude Code behaviour, not something prmpt chooses.'
-  Write-Host ''
-  Write-Host "  Turn it on:   node $Cli statusline install"
-  Write-Host "                (or re-run this installer with -StatusLine)"
-  Write-Host ''
 }
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"
