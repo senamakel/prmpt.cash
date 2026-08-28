@@ -23,7 +23,7 @@ paying for the moment a real problem is on your screen, and this is your share o
 | `ETH`   | Base   | Native ether                                                |
 | `SOL`   | Solana | Native lamports, no token account in the way                |
 | `USDC`  | Base   | A dollar that stays a dollar. The default, and the stable answer |
-| `XAUT`  | Solana | Tether Gold, if you would rather your terminal habit bought bullion. `XAUt0` on chain |
+| `ANT`   | Solana | Anthropic pre-IPO stock, tokenised by PreStocks. `ANTHROPIC` on chain |
 
 Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
 converted only when a payout settles, at the price right then, so switching changes
@@ -111,7 +111,7 @@ proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
 
 Which address gets paid follows from the token you choose: ERC-20s settle on
-Base, and SOL, TINY and XAUT on Solana. You choose on the dashboard.
+Base, and SOL, TINY and ANT on Solana. You choose on the dashboard.
 
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
