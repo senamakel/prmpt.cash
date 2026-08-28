@@ -42,7 +42,7 @@ test('--help exits 0 and documents every flag', async () => {
   const box = sandbox();
   const res = await install(box, ['--help']);
   assert.equal(res.code, 0, res.stderr);
-  for (const flag of ['--no-login', '--version', '--agents', '--endpoint', '--dir', '--project', '--uninstall']) {
+  for (const flag of ['--no-login', '--version', '--agents', '--endpoint', '--dir', '--bin-dir', '--no-path', '--project', '--uninstall']) {
     assert.ok(res.stdout.includes(flag), `--help does not mention ${flag}`);
   }
 });
@@ -563,4 +563,78 @@ test('with no agents selected and none present, the installer says so and fails'
   const res = await install(box, ['--dir', box.dirArg], { env: { PATH: agentFreePath() } });
   assert.notEqual(res.code, 0, 'configuring nothing should not report success');
   assert.ok(/no agents were configured/.test(res.stderr), res.stderr);
+});
+
+// ---------------------------------------------------------------- the command
+//
+// The CLI is a .mjs file inside the install directory, and nothing puts that
+// directory on anybody's PATH. Every instruction the installer prints -- login,
+// onboard, statusline install, wallet export -- is unusable if the shim is
+// missing, so these assert that `prmpt` is a real command afterwards, that it
+// is only ever OUR file that gets written or removed, and that --no-path is
+// genuinely opt-out rather than cosmetic.
+
+/** Where install.sh puts the shim for a sandbox whose HOME is not on PATH. */
+function shimPath(box) {
+  return path.join(box.home, '.local', 'bin', 'prmpt');
+}
+
+test('the installer leaves a runnable `prmpt` command behind', async () => {
+  const box = sandbox();
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+
+  const shim = shimPath(box);
+  assert.ok(fs.existsSync(shim), `no shim at ${shim}: ${res.stdout}${res.stderr}`);
+
+  // Run it the way a shell would. The point of the shim is that this works
+  // without naming node or the install directory.
+  const ran = await exec('sh', [shellPath(shim), '--help'], { env: smokeEnv(box.home) });
+  assert.equal(ran.code, 0, `${ran.stdout}${ran.stderr}`);
+  assert.ok(/usage: prmpt/.test(ran.stdout), ran.stdout);
+});
+
+test('--no-path installs the hooks and no command', async () => {
+  const box = sandbox();
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg, '--no-path']);
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'a shim was written despite --no-path');
+  // The instructions must then name something the reader can actually run.
+  assert.ok(/prmpt\.mjs onboard/.test(res.stdout), res.stdout);
+});
+
+test('--bin-dir decides where the command goes', async () => {
+  const box = sandbox();
+  const binDir = path.join(box.home, 'elsewhere');
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg,
+    '--bin-dir', shellPath(binDir)]);
+  assert.equal(res.code, 0, res.stderr);
+  assert.ok(fs.existsSync(path.join(binDir, 'prmpt')), res.stdout + res.stderr);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'wrote to the default directory too');
+});
+
+test('somebody else\'s prmpt is neither overwritten nor uninstalled', async () => {
+  const box = sandbox();
+  const shim = shimPath(box);
+  fs.mkdirSync(path.dirname(shim), { recursive: true });
+  fs.writeFileSync(shim, '#!/bin/sh\necho not ours\n', { mode: 0o755 });
+
+  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  assert.equal(res.code, 0, res.stderr);
+  assert.match(fs.readFileSync(shim, 'utf8'), /not ours/, 'a foreign prmpt was overwritten');
+  assert.ok(/not ours/.test(res.stderr), `the clash was not reported: ${res.stderr}`);
+
+  const un = await install(box, ['--uninstall', '--dir', box.dirArg]);
+  assert.equal(un.code, 0, un.stderr);
+  assert.ok(fs.existsSync(shim), 'uninstall deleted a prmpt it did not write');
+});
+
+test('--uninstall takes our command back off the PATH', async () => {
+  const box = sandbox();
+  await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  assert.ok(fs.existsSync(shimPath(box)));
+
+  const un = await install(box, ['--uninstall', '--dir', box.dirArg]);
+  assert.equal(un.code, 0, un.stderr);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'the shim outlived the install it points at');
 });
