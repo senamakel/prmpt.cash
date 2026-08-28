@@ -30,11 +30,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { chatInjectScript } from './chatInject';
-
-const MARKER_VERSION = 1;
-const MARKER = `/*__PRMPT_PATCH_V${MARKER_VERSION}__*/`;
-/** Any marker we have ever written, so an upgrade supersedes rather than stacks. */
-const ANY_MARKER = /\/\*__PRMPT_PATCH_V\d+__\*\//;
+import {
+  ANY_MARKER,
+  MARKER,
+  HOOK,
+  HOOKED,
+  strip,
+  canHook,
+  buildPatched,
+  isPatchedText,
+  isStaleText,
+} from './patchText';
 
 const BACKUP_SUFFIX = '.prmpt-backup';
 
@@ -43,16 +49,6 @@ const MAIN_RELS = [
   'out/vs/workbench/workbench.desktop.main.js',
   'out/vs/workbench/workbench.glass.main.js',
 ];
-
-/**
- * The tail of Cursor's bootstrap, where the workbench has just been handed
- * control. Appending after `B.main(S)` means our script runs once the workbench
- * exists rather than racing it.
- */
-const HOOK = 'performance.mark("code/didLoadWorkbenchMain"),B.main(S)})();';
-const HOOKED =
-  'performance.mark("code/didLoadWorkbenchMain"),B.main(S),' +
-  'setTimeout(function(){typeof PRMPT_RUN==="function"&&PRMPT_RUN()},2500)})();';
 
 export interface PatchResult {
   ok: boolean;
@@ -79,7 +75,7 @@ export function canPatch(): boolean {
 
 export function isPatched(): boolean {
   try {
-    return ANY_MARKER.test(fs.readFileSync(target(BOOTSTRAP_REL), 'utf8'));
+    return isPatchedText(fs.readFileSync(target(BOOTSTRAP_REL), 'utf8'));
   } catch {
     return false;
   }
@@ -88,23 +84,10 @@ export function isPatched(): boolean {
 /** True when a patch is present but from an older extension version. */
 export function isStale(): boolean {
   try {
-    const src = fs.readFileSync(target(BOOTSTRAP_REL), 'utf8');
-    return ANY_MARKER.test(src) && !src.includes(MARKER);
+    return isStaleText(fs.readFileSync(target(BOOTSTRAP_REL), 'utf8'));
   } catch {
     return false;
   }
-}
-
-/** Remove any marker block and undo the hook rewrite, returning clean source. */
-function strip(content: string): string {
-  let c = content;
-  const idx = c.search(ANY_MARKER);
-  if (idx >= 0) c = `${c.slice(0, idx).trimEnd()}\n`;
-  c = c.replace(
-    /performance\.mark\("code\/didLoadWorkbenchMain"\),B\.main\(S\),[^}]+\}\)\(\);/,
-    HOOK,
-  );
-  return c;
 }
 
 /** Older layouts injected into the main bundles; make sure nothing is left there. */
@@ -144,7 +127,7 @@ export function applyPatch(portBase: number): PatchResult {
     if (!fs.existsSync(backup)) fs.copyFileSync(file, backup);
 
     const pristine = strip(fs.readFileSync(backup, 'utf8'));
-    if (!pristine.includes(HOOK)) {
+    if (!canHook(pristine)) {
       return {
         ok: false,
         message:
@@ -162,11 +145,7 @@ export function applyPatch(portBase: number): PatchResult {
       return { ok: false, message: 'Generated patch failed validation — Cursor untouched.' };
     }
 
-    const out =
-      `${pristine.replace(HOOK, HOOKED)}\n` +
-      `${MARKER}\nfunction PRMPT_RUN(){${script}}\n`;
-
-    fs.writeFileSync(file, out);
+    fs.writeFileSync(file, buildPatched(pristine, script));
     return { ok: true, message: 'Chat card enabled. Reload Cursor to see it.' };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
