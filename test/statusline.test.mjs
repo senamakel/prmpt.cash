@@ -270,7 +270,7 @@ test('install writes Claude Code settings and chains what was there', async () =
   }, null, 2));
 
   const res = await run(CLI, {
-    args: ['statusline', 'install', '--claude'],
+    args: ['statusline', 'install'],
     env: baseEnv({ HOME: home }),
   });
   assert.equal(res.code, 0, res.stderr);
@@ -298,8 +298,8 @@ test('uninstall puts the original Claude Code status line back', async () => {
   fs.writeFileSync(settings, JSON.stringify({ statusLine: { type: 'command', command: 'echo mine' } }));
 
   const env = baseEnv({ HOME: home });
-  await run(CLI, { args: ['statusline', 'install', '--claude'], env });
-  await run(CLI, { args: ['statusline', 'uninstall', '--claude'], env });
+  await run(CLI, { args: ['statusline', 'install'], env });
+  await run(CLI, { args: ['statusline', 'uninstall'], env });
 
   const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
   assert.deepEqual(after.statusLine, { type: 'command', command: 'echo mine' });
@@ -313,8 +313,8 @@ test('uninstall with no prior status line removes the key entirely', async () =>
   fs.writeFileSync(settings, JSON.stringify({ model: 'opus' }));
 
   const env = baseEnv({ HOME: home });
-  await run(CLI, { args: ['statusline', 'install', '--claude'], env });
-  await run(CLI, { args: ['statusline', 'uninstall', '--claude'], env });
+  await run(CLI, { args: ['statusline', 'install'], env });
+  await run(CLI, { args: ['statusline', 'uninstall'], env });
 
   const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
   assert.equal('statusLine' in after, false);
@@ -330,12 +330,12 @@ test('uninstall leaves a status line that is no longer ours alone', async () => 
   fs.mkdirSync(path.dirname(settings), { recursive: true });
   const env = baseEnv({ HOME: home });
   fs.writeFileSync(settings, JSON.stringify({}));
-  await run(CLI, { args: ['statusline', 'install', '--claude'], env });
+  await run(CLI, { args: ['statusline', 'install'], env });
 
   // Somebody else takes the slot after we installed.
   const taken = { type: 'command', command: 'echo someone-else' };
   fs.writeFileSync(settings, JSON.stringify({ statusLine: taken }));
-  await run(CLI, { args: ['statusline', 'uninstall', '--claude'], env });
+  await run(CLI, { args: ['statusline', 'uninstall'], env });
 
   assert.deepEqual(JSON.parse(fs.readFileSync(settings, 'utf8')).statusLine, taken);
 });
