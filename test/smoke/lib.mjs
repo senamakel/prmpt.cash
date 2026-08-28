@@ -82,7 +82,7 @@ export function smokeEnv(home, extra = {}) {
     //
     //   NO_LOGIN      the installer defaults to signing in against the DEFAULT
     //                 endpoint, which is production. Without this, every run on
-    //                 every OS in the matrix creates a real publisher account
+    //                 every OS in the matrix creates a real user account
     //                 behind a wallet that dies with the runner. It did.
     //   NO_AUTO_ENROL the hook enrols itself when it finds no token, so even a
     //                 test that never runs the installer can reach production.

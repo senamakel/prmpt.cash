@@ -41,7 +41,7 @@ $ErrorActionPreference = 'Stop'
 
 # PRMPT_NO_LOGIN=1 is -NoLogin by environment, for scripted installs that cannot
 # easily pass a switch. Without it the installer signs in against the default
-# endpoint -- production -- and creates a real publisher behind a throwaway wallet.
+# endpoint -- production -- and creates a real user behind a throwaway wallet.
 if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
 
 $RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'

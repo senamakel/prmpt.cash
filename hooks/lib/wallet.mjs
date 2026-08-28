@@ -11,7 +11,7 @@
 // trade-off and not an implementation detail: a generated key lives in
 // cleartext at mode 0600 under the user's home directory. It is a hot wallet
 // holding ad revenue, not a vault. Anyone who can read the file can sign as the
-// publisher and, once the key ever holds funds, move them. Someone who wants
+// user and, once the key ever holds funds, move them. Someone who wants
 // payouts landing in a wallet they already control should `prmpt wallet import`
 // instead -- and someone who wants the key to never touch this machine should
 // keep using the dashboard install-code flow, which still works unchanged.
