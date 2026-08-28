@@ -202,6 +202,14 @@ test('no slot still prints the chained status line untouched', async () => {
 
 // --- the backend is not trusted with the user's terminal --------------------
 
+test('NO_COLOR drops the styling but keeps the link', async () => {
+  const { out } = await render({ env: { NO_COLOR: '1' } });
+  assert.ok(!/\x1b\[[0-9;]*m/.test(out), `SGR styling survived NO_COLOR: ${JSON.stringify(out)}`);
+  // The hyperlink is not colour: it is the only way the user ever gets paid,
+  // and dropping it would silently remove the earning path.
+  assert.ok(out.includes(`\x1b]8;;${AD.clickUrl}\x1b\\`), 'NO_COLOR removed the link');
+});
+
 test('escape sequences in the headline are never handed to the terminal', async () => {
   // The headline is written by a model, server-side, and lands unescaped on the
   // row above somebody's prompt. An escape in it could clear the screen, move

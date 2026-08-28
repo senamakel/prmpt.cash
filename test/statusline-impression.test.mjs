@@ -166,3 +166,17 @@ test('a fresher prompt fetch replaces a parked ad and brings its own bill', asyn
   await draw(home, 3);
   assert.deepEqual(billed(pending), ['req_bill_fresh'], 'the wrong set of ads was billed');
 });
+
+test('nothing is billed while prmpt is disabled', async () => {
+  // Opting out has to mean opting out of the money too. A claim recorded here
+  // would be flushed to the backend by the next hook that runs -- an impression
+  // reported for an ad that was deliberately never drawn.
+  const { home, pending } = parked('prompt');
+  const res = await runStatusLine({
+    stdin: JSON.stringify({ session_id: SESSION }),
+    env: baseEnv({ HOME: home, CLAUDECODE: '1', PRMPT_DISABLED: '1' }),
+  });
+  assert.equal(res.code, 0);
+  assert.equal(res.stdout, '', 'a disabled install drew an ad');
+  assert.deepEqual(billed(pending), [], 'a disabled install billed an impression');
+});
