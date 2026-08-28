@@ -137,12 +137,25 @@ test('the request body carries only the expected fields', async () => {
   const body = server.requests[0].body;
   assert.deepEqual(Object.keys(body).sort(), ['query', 'variables']);
   assert.deepEqual(Object.keys(body.variables), ['input']);
+  // Deliberately exact, not a subset. A new field on this request is a new
+  // thing leaving the user's machine, and it should have to be added here on
+  // purpose. `surface` joined the set when the status-line surface landed:
+  // the backend now has two places an ad can appear and must be told which.
   assert.deepEqual(
     Object.keys(input).sort(),
-    ['fileTypes', 'harness', 'installId', 'repoLanguage', 'sessionId', 'turnText'].sort(),
+    ['fileTypes', 'harness', 'installId', 'repoLanguage', 'sessionId', 'surface', 'turnText'].sort(),
   );
+  assert.equal(input.surface, 'TURN_END', 'the end-of-turn hook serves the TURN_END surface');
   assert.equal(input.repoLanguage, 'typescript');
   assert.deepEqual(input.fileTypes, ['.ts', '.tsx']);
+});
+
+test('the end-of-turn hook never sends signalTokens', async () => {
+  // signalTokens is the status-line surface's substitute for turn text. The
+  // end-of-turn hook has the real thing, so sending both would be sending the
+  // user's prompt alongside a reply that already matched on its own.
+  const { input } = await hit();
+  assert.equal(input.signalTokens, undefined);
 });
 
 test('the token travels in the Authorization header and nowhere else', async () => {
