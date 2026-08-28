@@ -107,10 +107,16 @@ const CHAIN_HOSTS = ['claude', 'codex'];
  * against the general case.
  *
  * The fallback across hosts is load-bearing rather than tidy-minded: the host
- * is guessed from CLAUDECODE, which is documented for hooks and NOT for the
- * status-line command, so a wrong guess would silently stop running a status
- * line the user built. Only one of these files is ever written on a machine, so
- * taking whichever exists cannot pick the wrong one.
+ * is guessed from CLAUDECODE, and only one of these files is ever written on a
+ * machine, so taking whichever exists cannot pick the wrong one.
+ *
+ * UNVERIFIED ASSUMPTION, and a judgement call rather than a fact: CLAUDECODE=1
+ * is documented for HOOKS, and nothing says it is set for the status-line
+ * command as well. It was not confirmed against a running Claude Code. If it
+ * turns out not to be set, the guess here is wrong every time -- which without
+ * the fallback would mean silently never running a status line somebody built,
+ * the one failure in this file that costs a user something they made. If you
+ * confirm the behaviour either way, say so here and simplify accordingly.
  */
 export function readChain(host = process.env.CLAUDECODE === '1' ? 'claude' : 'codex') {
   for (const candidate of [host, ...CHAIN_HOSTS]) {
