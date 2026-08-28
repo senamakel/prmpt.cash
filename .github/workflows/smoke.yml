@@ -7,6 +7,9 @@
 #
 #   install  three operating systems and three Node versions, no agents needed.
 #            Covers install.sh everywhere and install.ps1 on Windows.
+#   command  a real, unsandboxed install on a throwaway runner, purely to prove
+#            that `prmpt` resolves in a NEW shell afterwards -- the one claim
+#            the sandboxed suite deliberately cannot make.
 #   agents   the real Claude Code, Codex and Gemini CLI, installed from npm.
 #            Covers autodetection, the plugin manifest Claude Code parses, and
 #            the exact command string each host is expected to execute.
@@ -74,6 +77,87 @@ jobs:
       - name: installer smoke
         shell: bash
         run: node --test test/smoke/installer.smoke.test.mjs test/smoke/windows.smoke.test.mjs
+
+  command:
+    name: prmpt on PATH · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The installer smoke suite runs in a sandbox HOME and with
+      # PRMPT_NO_PATH_PERSIST=1, because the PATH entry install.ps1 writes is
+      # machine state and a test must not leave it on a developer's box. That
+      # leaves exactly one claim unproven: that after a REAL install, `prmpt`
+      # resolves in a new shell. A throwaway runner is the only place that can
+      # honestly be checked, so it is checked here and nowhere else.
+      #
+      # --no-login / -NoLogin is mandatory: without it the installer signs in
+      # against the default endpoint, which is production, and creates a real
+      # user behind a wallet that dies with the runner.
+      - name: install for real, then resolve the command
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eux
+          sh install.sh --no-login --agents claude --dir "$HOME/app"
+          # A fresh shell, told only what a shell rc would have told it.
+          env -i HOME="$HOME" PATH="$HOME/.local/bin:/usr/bin:/bin" sh -c '
+            set -eu
+            command -v prmpt
+            prmpt --help | grep -q "usage: prmpt"
+          '
+
+      - name: install for real, then resolve the command
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\install.ps1 -NoLogin -Agents claude -Dir "$env:USERPROFILE\app"
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 exited $LASTEXITCODE" }
+          # A NEW process taking its PATH from the registry, which is what the
+          # user's next terminal does. Reading $env:PATH here would only prove
+          # the installer edited its own process.
+          $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+          $machine  = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+          # Built as a string rather than a here-string: a PowerShell here-string
+          # terminator has to sit in column zero, which cannot happen inside a
+          # YAML block scalar.
+          $child = "`$env:PATH = '$machine;$userPath'; " +
+                   "if (-not (Get-Command prmpt -ErrorAction SilentlyContinue)) { exit 9 }; " +
+                   "prmpt --help"
+          $out = pwsh -NoProfile -Command $child
+          if ($LASTEXITCODE -eq 9) { throw 'prmpt did not resolve from the user PATH' }
+          if ($LASTEXITCODE -ne 0) { throw "prmpt did not run: $out" }
+          if ($out -notmatch 'usage: prmpt') { throw "unexpected output: $out" }
+
+      # Uninstall is half the contract: the command goes away with the install
+      # it points at, and the PATH entry goes with it.
+      - name: uninstall takes it back off
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eux
+          sh install.sh --uninstall --dir "$HOME/app"
+          test ! -e "$HOME/.local/bin/prmpt"
+
+      - name: uninstall takes it back off
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\install.ps1 -Uninstall -Dir "$env:USERPROFILE\app"
+          if (Test-Path "$env:USERPROFILE\.local\bin\prmpt.cmd") { throw 'the shim survived -Uninstall' }
+          $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+          if (($userPath -split ';') -contains "$env:USERPROFILE\.local\bin") {
+            throw 'the PATH entry survived -Uninstall'
+          }
 
   agents:
     name: agents · ${{ matrix.os }}
