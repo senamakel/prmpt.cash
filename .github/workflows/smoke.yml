@@ -116,3 +116,58 @@ jobs:
         env:
           PRMPT_SMOKE_REQUIRE_AGENTS: '1'
         run: node --test test/smoke/agents.smoke.test.mjs
+
+  linux-editor:
+    name: editor integration · linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # This is the real Linux distribution, not a mock of its command-line
+      # interface.  We only use its non-interactive extension commands, so no
+      # display server or user profile is involved.
+      - name: install VS Code CLI
+        run: |
+          set -eux
+          curl -fsSL https://update.code.visualstudio.com/latest/linux-deb-x64/stable -o /tmp/code.deb
+          sudo apt-get update
+          sudo apt-get install -y /tmp/code.deb xvfb
+          code --version
+
+      - name: build and test the editor extension
+        working-directory: vscode
+        run: |
+          set -eux
+          npm ci --no-audit --no-fund
+          npm test
+          npx vsce package --no-dependencies --out ../prmpt-linux-e2e.vsix
+
+      - name: install the packaged extension through VS Code
+        env:
+          PRMPT_SMOKE_REQUIRE_LINUX_E2E: '1'
+          PRMPT_CODE_BIN: /usr/bin/code
+          PRMPT_VSIX: ${{ github.workspace }}/prmpt-linux-e2e.vsix
+        run: npm run test:e2e:linux
+
+      - name: render a mock ad in the real VS Code UI
+        working-directory: vscode
+        env:
+          PRMPT_SMOKE_REQUIRE_LINUX_UI: '1'
+          PRMPT_CODE_BIN: /usr/bin/code
+          PRMPT_CODE_APP: /usr/share/code/code
+          PRMPT_VSIX: ${{ github.workspace }}/prmpt-linux-e2e.vsix
+          PRMPT_UI_ARTIFACT_DIR: ${{ github.workspace }}/ui-artifacts
+        run: xvfb-run -a npm run test:e2e:ui
+
+      - name: upload UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-editor-ui
+          path: ui-artifacts/
+          if-no-files-found: warn

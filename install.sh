@@ -127,7 +127,7 @@ done
 # -- can be stopped from signing in without having to remember the flag at every
 # call site. Forgetting it is not a harmless mistake: without it the installer
 # signs in against the DEFAULT endpoint, which is production, and creates a real
-# publisher account behind a wallet that dies with the machine.
+# user account behind a wallet that dies with the machine.
 [ "${PRMPT_NO_LOGIN:-}" = "1" ] && NO_LOGIN=1
 [ "${PRMPT_NO_ONBOARD:-}" = "1" ] && NO_ONBOARD=1
 [ "${PRMPT_YES:-}" = "1" ] && ASSUME_YES=1
@@ -243,7 +243,7 @@ say "  sees. There are no dependencies to audit -- it is plain Node ESM."
 say ""
 say "  ${D}What you earn${R}  70% of the clearing price on every impression and every"
 say "  click, paid to a wallet created on this machine in step 2. USDC, cbBTC or"
-say "  ETH on Base; SOL, TINY or XAUt0 on Solana -- you choose which in step 3."
+say "  ETH on Base; SOL, TINY or ANT on Solana -- you choose which in step 3."
 say ""
 say "  ${D}Off at any time${R}  export PRMPT_DISABLED=1, or --uninstall to remove it."
 

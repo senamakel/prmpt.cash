@@ -240,7 +240,7 @@ test('status reads the expiry out of the stored JWT', async () => {
   const exp = Math.floor(Date.now() / 1000) + 30 * 86400;
   const jwt = [
     Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url'),
-    Buffer.from(JSON.stringify({ typ: 'publisher', exp })).toString('base64url'),
+    Buffer.from(JSON.stringify({ typ: 'user', exp })).toString('base64url'),
     'not-a-real-signature',
   ].join('.');
 

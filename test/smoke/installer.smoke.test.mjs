@@ -544,7 +544,7 @@ test('--uninstall removes our entries, keeps everyone else\'s, and keeps the tok
 test('a default install contacts nothing and creates no credentials', async () => {
   // The guard rail for this whole suite. smokeEnv sets PRMPT_NO_LOGIN=1; if that
   // ever stops being honoured, this fails here instead of silently creating a
-  // publisher account on production from five matrix jobs and a weekly cron.
+  // user account on production from five matrix jobs and a weekly cron.
   const box = sandbox();
   const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
   assert.equal(res.code, 0, res.stderr);

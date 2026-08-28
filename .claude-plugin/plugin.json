@@ -1,13 +1,13 @@
 {
   "name": "prmpt",
   "version": "0.1.0",
-  "description": "Earn free crypto for the replies your coding agent already writes. Prints one clearly-labelled sponsored line when a reply actually matches an advertiser, and clicking it pays you: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
+  "description": "Earn free crypto for the replies your coding agent already writes. Prints one clearly-labelled sponsored line when a reply actually matches an advertiser, and clicking it pays you: USDC, BTC or ETH on Base, or SOL, TINY or ANT on Solana.",
   "author": {
     "name": "prmpt.cash",
     "url": "https://prmpt.cash"
   },
   "homepage": "https://github.com/senamakel/prmpt.cash",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "keywords": [
     "ads",
     "sponsorship",

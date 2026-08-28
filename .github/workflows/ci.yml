@@ -39,6 +39,11 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: vscode/package-lock.json
+      # vsce only ships a LICENSE that sits in the package directory, so the
+      # extension carries its own copy. Two copies can drift, and a vsix whose
+      # licence disagrees with the repo's is worse than one carrying none.
+      - name: the extension's LICENSE is the repo's, verbatim
+        run: cmp LICENSE vscode/LICENSE
       - name: install
         working-directory: vscode
         run: npm ci

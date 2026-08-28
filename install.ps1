@@ -45,7 +45,7 @@ $ErrorActionPreference = 'Stop'
 
 # PRMPT_NO_LOGIN=1 is -NoLogin by environment, for scripted installs that cannot
 # easily pass a switch. Without it the installer signs in against the default
-# endpoint -- production -- and creates a real publisher behind a throwaway wallet.
+# endpoint -- production -- and creates a real user behind a throwaway wallet.
 if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
 if ($env:PRMPT_NO_ONBOARD -eq '1') { $NoOnboard = [switch]$true }
 if ($env:PRMPT_YES -eq '1') { $Yes = [switch]$true }
@@ -287,7 +287,7 @@ Write-Host '  sees. There are no dependencies to audit -- it is plain Node ESM.'
 Write-Host ''
 Write-Host '  What you earn  70% of the clearing price on every impression and every'
 Write-Host '  click, paid to a wallet created on this machine in step 2. USDC, cbBTC or'
-Write-Host '  ETH on Base; SOL, TINY or XAUt0 on Solana -- you choose which in step 3.'
+Write-Host '  ETH on Base; SOL, TINY or ANT on Solana -- you choose which in step 3.'
 Write-Host ''
 Write-Host '  Off at any time  $env:PRMPT_DISABLED = 1, or -Uninstall to remove it.'
 

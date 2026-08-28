@@ -137,7 +137,7 @@ ${RELEASE_REPO} for a newer release and, if there is one, verifies its
 checksum and swaps this directory for it. Your token and wallet key live in
 ~/.config/prmpt and are never touched by that.
 
-One seed phrase holds both chains: a Solana address (SOL, TINY, XAUT) and a
+One seed phrase holds both chains: a Solana address (SOL, TINY, ANT) and a
 Base address (USDC, BTC, ETH). Which one is paid follows from the token you
 choose on the dashboard.
 
@@ -189,7 +189,7 @@ async function cmdLogin(args) {
   // default token is not one of them.
   if (!result.evmLinked) {
     err(`prmpt: warning -- could not link the Base address: ${result.evmError}`);
-    err('  Solana payouts (SOL, TINY, XAUT) still work. ERC-20 earnings will');
+    err('  Solana payouts (SOL, TINY, ANT) still work. ERC-20 earnings will');
     err("  accrue but cannot be sent until this succeeds. Re-run 'prmpt login'.");
     err('');
   }
@@ -580,7 +580,7 @@ function openInBrowser(url) {
  * token already speaks for.
  *
  * Deliberately NOT `login`. Login signs in as whatever key is on this machine,
- * which on an install linked by dashboard code would switch the publisher to a
+ * which on an install linked by dashboard code would switch the user to a
  * different account entirely. This only ever ADDS an address to the existing
  * one, so it is safe to run unattended — which the hook does, to backfill
  * installs created before payouts were two-chain.
@@ -602,7 +602,7 @@ async function cmdLinkEvm() {
     );
   }
   // Refuse when the local key is not the account's own. Attaching an address we
-  // hold to somebody else's publisher is exactly the mistake the SIWS work was
+  // hold to somebody else's user is exactly the mistake the SIWS work was
   // done to make impossible; the backend would allow it, since the token is
   // valid, so the refusal belongs here.
   if (stored.solanaWallet && stored.solanaWallet !== wallet.address) {
@@ -620,7 +620,7 @@ async function cmdLinkEvm() {
   if (challenge.address.toLowerCase() !== evm.address.toLowerCase()) {
     throw new UserError(`the challenge is for ${challenge.address}, not ${evm.address}`);
   }
-  const publisher = await linkEvmWallet({
+  const user = await linkEvmWallet({
     endpoint,
     token,
     address: evm.address,
@@ -629,15 +629,15 @@ async function cmdLinkEvm() {
   });
 
   writeConfig({
-    evmWallet: publisher.evmWallet ?? evm.address,
-    payoutToken: publisher.payoutToken ?? undefined,
-    payoutChain: publisher.payoutChain ?? undefined,
+    evmWallet: user.evmWallet ?? evm.address,
+    payoutToken: user.payoutToken ?? undefined,
+    payoutChain: user.payoutChain ?? undefined,
   });
 
   out('prmpt: linked a Base address to this install.');
-  out(`  base:    ${publisher.evmWallet ?? evm.address}`);
-  if (publisher.payoutToken) {
-    out(`  paid in: ${publisher.payoutToken}${publisher.payoutChain ? ` on ${publisher.payoutChain}` : ''}`);
+  out(`  base:    ${user.evmWallet ?? evm.address}`);
+  if (user.payoutToken) {
+    out(`  paid in: ${user.payoutToken}${user.payoutChain ? ` on ${user.payoutChain}` : ''}`);
   }
 }
 
