@@ -58,6 +58,10 @@ ${B}prmpt.cash installer${R}
   --project            Configure ./ (this project) instead of your home directory
   --editor             Also install the VS Code / Cursor extension, if one of
                        them is on your PATH (--no-editor to skip the offer)
+  --statusline         Also show the ad on Claude Code's status line, above your
+                       prompt. OPT-IN: Claude Code hides most of its footer key
+                       hints -- including "esc to interrupt" -- whenever a custom
+                       status line is set, so this is never wired up for you
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
@@ -88,6 +92,8 @@ while [ $# -gt 0 ]; do
     --agents=*)  AGENTS="${1#*=}"; shift ;;
     --editor)    EDITOR_EXT=1; shift ;;
     --no-editor) EDITOR_EXT=0; shift ;;
+    --statusline) STATUSLINE=1; shift ;;
+    --no-statusline) STATUSLINE=0; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
@@ -474,19 +480,35 @@ say ""
 say "${B}Wiring up agents${R} ${D}($SCOPE scope)${R}"
 CONFIGURED=0
 
-# Claude Code -- Stop, timeout in seconds, plus the status-line surface.
+# Claude Code -- Stop, timeout in seconds, plus the OPT-IN status-line surface.
+#
+# The status line is never wired up for you, and that is a deliberate product
+# decision rather than caution. Claude Code drops most of its footer keyboard
+# hints -- "esc to interrupt" among them -- the moment any custom status line
+# exists. Taking a keybinding hint away from somebody who only asked for an ad
+# at the end of a turn is not a trade this installer makes on their behalf, and
+# on an upgrade it would take it away from every existing install at once.
+#
+# UserPromptSubmit is gated with it, not separately. That hook exists ONLY to
+# fetch a decision for the status line, so wiring it without somewhere to draw
+# the result would spend a request -- and send keywords derived from what the
+# user typed -- for an ad that could never appear.
 if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected claude || [ -d "$HOME/.claude" ]; }; }; then
   if merge_hook "$CLAUDE_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Claude Code  $CLAUDE_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
-    if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK" 0; then
-      ok "             ${D}+ UserPromptSubmit (fetches the status-line slot)${R}"
-    fi
-    if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK" 0; then
-      if [ -f "$STATE_FILE" ]; then
-        ok "             ${D}+ statusLine (wrapping the one you already had)${R}"
-      else
-        ok "             ${D}+ statusLine${R}"
+    if [ "${STATUSLINE:-0}" = "1" ]; then
+      if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK" 0; then
+        ok "             ${D}+ UserPromptSubmit (fetches the status-line slot)${R}"
       fi
+      if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK" 0; then
+        if [ -f "$STATE_FILE" ]; then
+          ok "             ${D}+ statusLine (wrapping the one you already had)${R}"
+        else
+          ok "             ${D}+ statusLine${R}"
+        fi
+      fi
+    else
+      skip "status line not installed -- see below to turn it on"
     fi
   fi
 else skip "Claude Code not found"; fi
@@ -581,10 +603,25 @@ say ""
 say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
-if [ -f "$STATE_FILE" ]; then
+if [ "${STATUSLINE:-0}" = "1" ]; then
+  if [ -f "$STATE_FILE" ]; then
+    say ""
+    say "  ${D}Your status line still runs; ours is drawn on the row beneath it,"
+    say "  and --uninstall gives yours back exactly as it was.${R}"
+  fi
+else
+  # Said whether or not Claude Code is present: the trade-off is the reason
+  # this is off, and somebody deciding to turn it on deserves to know the cost
+  # before they do, not after their key hints have gone.
   say ""
-  say "  ${D}Your status line still runs; ours is appended after it, and"
-  say "  --uninstall gives yours back exactly as it was.${R}"
+  say "  ${D}Not installed: the status line.${R} The same ad can also sit on the row"
+  say "  above your prompt while the model works, refreshed from the prompt you"
+  say "  just typed. It is off because Claude Code hides most of its footer key"
+  say '  hints -- including "esc to interrupt" -- whenever a custom status line'
+  say "  is set. That is Claude Code behaviour, not something prmpt chooses."
+  say ""
+  say "  ${D}Turn it on:${R}   $NODE_BIN $CLI statusline install"
+  say "                  ${D}(or re-run this installer with --statusline)${R}"
 fi
 say ""
 # The login above already printed a signed-in link, but that code lives two
