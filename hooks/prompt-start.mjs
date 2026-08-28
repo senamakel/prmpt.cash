@@ -103,21 +103,23 @@ function main() {
     // would race two `prmpt login` children against each other on first run.
     if (!config.token) return quiet();
 
-    // Anything already rendered gets reported now, whether or not this turn
-    // produces an ad of its own. Gated on the pending log being non-empty, so
-    // the overwhelming majority of turns pay nothing for this line.
-    flushImpressionsInBackground();
-
     const harness = statusLineHarness();
-    if (!harness) return quiet();
-
-    const tokens = signalTokens(promptText(payload));
     // A prompt of pure stopwords carries no signal. Asking anyway would spend a
     // request, and an embedding, on nothing.
-    if (tokens.length === 0) return quiet();
+    const tokens = harness ? signalTokens(promptText(payload)) : [];
+
+    if (!harness || tokens.length === 0) {
+      // Nothing to fetch, but anything already rendered is still owed to the
+      // user, so report it on its own.
+      flushImpressionsInBackground();
+      return quiet();
+    }
 
     const { repoLanguage, fileTypes } = detectRepo(config.cwd);
 
+    // One child, not two: the fetch worker flushes the pending impressions as
+    // well. Spawning a separate flush here would double the process cost of a
+    // prompt and race two confirmations of the same batch against each other.
     fetchSlotInBackground(config, {
       installId: config.installId,
       sessionId: config.sessionId,

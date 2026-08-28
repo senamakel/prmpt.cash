@@ -106,7 +106,6 @@ function clip(s, max) {
  * repaint the screen or hide what it did. Text only.
  */
 function plainText(s) {
-  // eslint-disable-next-line no-control-regex
   return s.replace(/[\x00-\x1f\x7f]/g, ' ');
 }
 
