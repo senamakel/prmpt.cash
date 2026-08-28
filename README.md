@@ -313,6 +313,15 @@ prmpt wallet export [--json]    # print the Solana secret key
 prmpt logout                    # forget the token; the keys are left alone
 ```
 
+The installer puts that command on your PATH: a small shim at
+`~/.local/bin/prmpt` (`%USERPROFILE%\.local\bin\prmpt.cmd` on Windows, which is
+added to your user PATH) that runs the CLI out of the install directory. Pass
+`--bin-dir <path>` to put it somewhere else, or `--no-path` to skip it and run
+`node <install-dir>/bin/prmpt.mjs` yourself. Only a shim the installer wrote is
+ever replaced or removed, so a `prmpt` of your own is left alone. If the
+directory is not already on your PATH the installer says so and prints the line
+to add.
+
 **The plugin holds keys; the web holds settings.** `prmpt dashboard` mints a
 single-use two-minute code from the token already on disk and opens it in your
 browser, with no wallet extension needed and the key never leaving the machine.
