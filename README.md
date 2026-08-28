@@ -221,6 +221,38 @@ advertiser. Every payout is a real on-chain transaction, listed with its
 signature at <https://prmpt.cash/earnings> and counted on the public
 [transparency page](https://prmpt.cash/transparency).
 
+## The status line (opt-in)
+
+By default the ad appears once, at the end of a turn, and scrolls away with
+everything else. `prmpt statusline install` also renders it on Claude Code's
+status line — one dim, clickable row directly above your prompt — until it ages
+out after 30 minutes.
+
+```
+$ prmpt statusline install
+$ prmpt statusline status
+$ prmpt statusline uninstall
+```
+
+Three things worth knowing before you turn it on:
+
+- **It never makes a request.** The end-of-turn hook already matched an ad for
+  your turn; it parks that decision in `~/.config/prmpt/slot.json` and the status
+  line only reads it. A status line re-renders constantly, so fetching from it
+  would hammer the backend and put a network round trip inside a redraw.
+- **Claude Code hides its footer key hints while a custom status line is set** —
+  including `esc to interrupt`. That is Claude Code's behaviour, not ours, and it
+  is why this is opt-in rather than part of the install. Uninstalling brings them
+  back.
+- **A status line you already had keeps working.** Yours is stashed, run, and
+  rendered above ours; `uninstall` puts it back exactly as it was.
+
+**Codex has no equivalent.** Its `[tui] status_line` accepts identifiers from a
+fixed list of built-in items and cannot run a command — see
+[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
+otherwise unaffected: its `Stop` hook still matches your turns and still prints
+the end-of-turn line.
+
 ## It cannot break your session
 
 This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-end.mjs):
@@ -266,10 +298,14 @@ Those units and event names are not interchangeable; the installer handles each
 correctly. Per-host detail lives in [`codex/`](codex/README.md),
 [`gemini/`](gemini/README.md) and [`amp/`](amp/README.md).
 
-**Cursor and Windsurf are deliberately absent.** Both can hand a hook the
-finished turn, but neither documents a way for that hook to show you anything.
-An ad could be matched and never displayed, and you would earn nothing from
-it. We would rather leave them out than take the impression.
+**Windsurf is deliberately absent.** It can hand a hook the finished turn, but
+documents no way for that hook to show you anything. An ad could be matched and
+never displayed, and you would earn nothing from it. We would rather leave it
+out than take the impression.
+
+**Cursor needs the editor extension.** Same problem — the hook sees the turn and
+has nowhere to put the result — solved by giving it somewhere: see
+[`vscode/`](vscode/README.md).
 
 **The Windows installer is tested, not battle-tested.** `install.ps1` mirrors
 `install.sh` step for step and delegates every JSON edit to the same Node
