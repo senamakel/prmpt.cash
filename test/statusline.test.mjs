@@ -278,6 +278,10 @@ test('install writes Claude Code settings and chains what was there', async () =
   const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
   assert.equal(after.statusLine.type, 'command');
   assert.match(after.statusLine.command, /statusline\.mjs/);
+  assert.equal(
+    'refreshInterval' in after.statusLine, false,
+    'the slot only changes at turn end, which is already an event -- a timer would spawn a process every few seconds for nothing',
+  );
   assert.deepEqual(after.permissions, { allow: ['Bash(ls:*)'] }, 'unrelated settings untouched');
 
   const chain = JSON.parse(
@@ -317,66 +321,7 @@ test('uninstall with no prior status line removes the key entirely', async () =>
   assert.equal(after.model, 'opus');
 });
 
-test('install edits only the [tui] table in Codex config', async () => {
-  const home = tmpDir('prmpt-home-');
-  seedConfig(home);
-  const cfg = path.join(home, '.codex', 'config.toml');
-  fs.mkdirSync(path.dirname(cfg), { recursive: true });
-  fs.writeFileSync(cfg, [
-    'model = "gpt-5"',
-    '',
-    '[mcp_servers.thing]',
-    'status_line = "not the tui one"',
-    '',
-    '[tui]',
-    'notifications = true',
-    '',
-  ].join('\n'));
 
-  const res = await run(CLI, {
-    args: ['statusline', 'install', '--codex'],
-    env: baseEnv({ HOME: home }),
-  });
-  assert.equal(res.code, 0, res.stderr);
-
-  const after = fs.readFileSync(cfg, 'utf8');
-  assert.match(after, /\[tui\][\s\S]*status_line = \[.*statusline\.mjs.*\] # prmpt/);
-  assert.match(after, /status_line_timeout_ms = 1500/);
-  assert.match(after, /notifications = true/);
-  assert.match(after, /model = "gpt-5"/);
-  assert.match(after, /status_line = "not the tui one"/, 'the other table is untouched');
-});
-
-test('installing twice into Codex leaves exactly one status_line', async () => {
-  const home = tmpDir('prmpt-home-');
-  seedConfig(home);
-  const cfg = path.join(home, '.codex', 'config.toml');
-  fs.mkdirSync(path.dirname(cfg), { recursive: true });
-  fs.writeFileSync(cfg, '[tui]\n');
-
-  const env = baseEnv({ HOME: home });
-  await run(CLI, { args: ['statusline', 'install', '--codex'], env });
-  await run(CLI, { args: ['statusline', 'install', '--codex'], env });
-
-  const after = fs.readFileSync(cfg, 'utf8');
-  assert.equal((after.match(/^[ \t]*status_line[ \t]*=/gm) || []).length, 1);
-});
-
-test('Codex install refuses to replace a built-in status_line it cannot chain', async () => {
-  const home = tmpDir('prmpt-home-');
-  seedConfig(home);
-  const cfg = path.join(home, '.codex', 'config.toml');
-  fs.mkdirSync(path.dirname(cfg), { recursive: true });
-  const original = '[tui]\nstatus_line = ["model", "tokens"]\n';
-  fs.writeFileSync(cfg, original);
-
-  const res = await run(CLI, {
-    args: ['statusline', 'install', '--codex'],
-    env: baseEnv({ HOME: home }),
-  });
-  assert.notEqual(res.code, 0);
-  assert.equal(fs.readFileSync(cfg, 'utf8'), original, 'the config is left exactly as it was');
-});
 
 test('uninstall leaves a status line that is no longer ours alone', async () => {
   const home = tmpDir('prmpt-home-');
@@ -393,4 +338,48 @@ test('uninstall leaves a status line that is no longer ours alone', async () => 
   await run(CLI, { args: ['statusline', 'uninstall', '--claude'], env });
 
   assert.deepEqual(JSON.parse(fs.readFileSync(settings, 'utf8')).statusLine, taken);
+});
+
+// --- Codex keeps everything except this one placement -----------------------
+
+test('a Codex turn still parks a slot, even though Codex cannot render one', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const server = await stubServer(() => decision());
+
+  // Codex's notify program passes the payload as a single JSON argv, with the
+  // turn text under `last-assistant-message`.
+  const res = await run(TURN_END, {
+    env: baseEnv({ HOME: home, PRMPT_ENDPOINT: server.url }),
+    args: [JSON.stringify({
+      type: 'agent-turn-complete',
+      'last-assistant-message': LONG_TURN,
+      'thread-id': 'codex-thread-1',
+    })],
+  });
+  await server.close();
+
+  assert.equal(res.code, 0);
+  const slot = JSON.parse(fs.readFileSync(slotFile(home), 'utf8'));
+  assert.equal(slot.headline, 'Ship faster with Widget CI');
+  assert.equal(slot.harness, 'codex');
+});
+
+test('install says what Claude Code hides in exchange', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  const res = await run(CLI, { args: ['statusline', 'install'], env: baseEnv({ HOME: home }) });
+  assert.equal(res.code, 0, res.stderr);
+  assert.match(res.stdout, /esc to interrupt/);
+});
+
+test('status explains why Codex has no status line rather than staying silent', async () => {
+  const home = tmpDir('prmpt-home-');
+  seedConfig(home);
+  const res = await run(CLI, { args: ['statusline', 'status'], env: baseEnv({ HOME: home }) });
+  assert.equal(res.code, 0, res.stderr);
+  assert.match(res.stdout, /codex\s+not available/);
+  assert.match(res.stdout, /built-in item ids/);
+  assert.match(res.stdout, /Stop hook/);
 });
