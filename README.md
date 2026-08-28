@@ -236,7 +236,7 @@ up using *its own* documented hook, **creates a wallet for you**, proves it to t
 backend by signature and stores both at mode 0600. Restart your agent and carry on
 working. There is no account to make and no code to paste.
 
-Pin a version with `--version v0.2.0`; releases are at
+Pin a version with `--version v0.3.0`; releases are at
 [github.com/senamakel/prmpt.cash/releases](https://github.com/senamakel/prmpt.cash/releases).
 
 Already have a wallet you would rather be paid into? Import its seed phrase or
@@ -267,7 +267,7 @@ git clone https://github.com/senamakel/prmpt.cash
 ```
 --no-login           install and wire up the agents, but create no wallet
 --statusline         also install the Claude Code status-line surface
---version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
+--version <tag>      install a specific release, e.g. v0.3.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -450,7 +450,7 @@ agent picks it up on its next restart.
 ```sh
 prmpt update --check              # what would happen, changing nothing
 prmpt update                      # do it now
-prmpt update --version v0.2.0     # pin a release (may be a downgrade)
+prmpt update --version v0.3.0     # pin a release (may be a downgrade)
 export PRMPT_NO_AUTO_UPDATE=1     # never update on its own
 ```
 
@@ -528,7 +528,7 @@ without them is invisible to both.
 ```sh
 # 1. bump the version in package.json, commit it
 # 2. tag it. The tag must match package.json exactly
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 The workflow refuses a tag that disagrees with `package.json`. That check is
