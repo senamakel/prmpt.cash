@@ -612,7 +612,7 @@ want() {
 # picker -- "not found" would be a lie about a host that is sitting right there
 # and was simply not asked for.
 passed_over() {
-  if [ -n "$AGENTS" ]; then skip "$2 not selected"; else skip "$2 not found"; fi
+  if [ -n "$AGENTS" ]; then skip "$1 not selected"; else skip "$1 not found"; fi
 }
 
 if [ "$SCOPE" = "project" ]; then
@@ -659,7 +659,7 @@ if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected clau
       skip "status line not installed -- see below to turn it on"
     fi
   fi
-else passed_over claude "Claude Code"; fi
+else passed_over "Claude Code"; fi
 
 # Codex -- Stop, timeout in seconds. Same event name as Claude Code; the hook
 # tells them apart by CLAUDECODE=1 at runtime.
@@ -667,14 +667,14 @@ if { [ -n "$AGENTS" ] && want codex; } || { [ -z "$AGENTS" ] && { detected codex
   if merge_hook "$CODEX_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Codex        $CODEX_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
-else passed_over codex "Codex"; fi
+else passed_over "Codex"; fi
 
 # Gemini CLI -- AfterAgent, timeout in MILLISECONDS, and it wants a matcher.
 if { [ -n "$AGENTS" ] && want gemini; } || { [ -z "$AGENTS" ] && { detected gemini || [ -d "$HOME/.gemini" ]; }; }; then
   if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*" "$HOOK"; then
     ok "Gemini CLI   $GEMINI_CFG  ${D}(AfterAgent, ms)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
-else passed_over gemini "Gemini CLI"; fi
+else passed_over "Gemini CLI"; fi
 
 # Amp -- a TypeScript plugin, not a hook. Unverified against a live install.
 if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || [ -d "$HOME/.config/amp" ]; }; }; then
@@ -683,7 +683,7 @@ if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || 
     ok "Amp          $AMP_DIR/prmpt.ts  ${D}(agent.end, unverified)${R}"
     CONFIGURED=$((CONFIGURED+1))
   fi
-else passed_over amp "Amp"; fi
+else passed_over "Amp"; fi
 
 # ------------------------------------------------------------ editor extension
 # The extension is a DISPLAY for what the hook already matched -- it is what
