@@ -48,6 +48,21 @@ export const FILLER_TURN_END = 'turn-end';
 export const FILLER_PROMPT = 'prompt';
 
 /**
+ * The fillers that owe a status-line impression.
+ *
+ * Only the prompt fetch does. A turn-end ad was served and billed by the
+ * request that produced it, so billing it again here would charge the
+ * advertiser twice for one decision -- silently, and visible only as spend
+ * that does not match the impressions anybody was actually shown.
+ */
+const BILLABLE_FILLERS = new Set([FILLER_PROMPT]);
+
+/** Does a decision put here by `filler` still owe an impression? */
+export function isBillable(filler) {
+  return BILLABLE_FILLERS.has(filler);
+}
+
+/**
  * How many un-confirmed impressions we are willing to hold.
  *
  * An install that is offline for a week must not turn this into an unbounded
@@ -164,10 +179,12 @@ export function clearSlot() {
 /**
  * Claim the single billable impression for this requestId.
  *
- * Returns true exactly once per decision: the first caller records the claim in
- * the slot file and appends to the pending log; every later caller gets false.
- * Claude Code re-renders the status line continuously while the model works, so
- * the naive "append on render" would bill one decision hundreds of times.
+ * Returns true exactly once per decision, and only for a decision that owes
+ * one: the first caller records the claim in the slot file and appends to the
+ * pending log; every later caller gets false, and so does every caller for a
+ * parked turn-end ad, which was billed when it was served. Claude Code
+ * re-renders the status line continuously while the model works, so the naive
+ * "append on render" would bill one decision hundreds of times.
  *
  * The claim is written by rename, which is atomic, so two renders racing each
  * other cannot both observe an unclaimed slot AND both leave it claimed with
@@ -177,6 +194,7 @@ export function clearSlot() {
 export function claimImpression(requestId, { sessionId = '' } = {}) {
   const slot = readSlot({ sessionId });
   if (!slot || !requestId || slot.requestId !== requestId) return false;
+  if (!isBillable(slot.filler)) return false;
   if (slot.impressedAt) return false;
   try {
     writeAtomic(slotPath(), {
