@@ -57,8 +57,9 @@ ${B}prmpt.cash installer${R}
                        (PRMPT_NO_LOGIN=1 does the same, for scripted installs)
   --no-onboard         Do not open the setup page in a browser at the end
                        (PRMPT_NO_ONBOARD=1 does the same)
-  -y, --yes            Skip the picker and take the autodetected defaults.
-                       Implied whenever there is no terminal to draw it on
+  -y, --yes            Skip the picker and wire up every host that is present,
+                       without the status line or the editor extensions. This is
+                       also what happens when there is no terminal to draw on
   --version <tag>      Install a specific release, e.g. v0.2.0 (default: latest)
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
@@ -388,17 +389,15 @@ pick_get()    { eval "printf '%s' \"\$PICK_$1\""; }
 pick_set()    { eval "PICK_$1=$2"; }
 pick_toggle() { if [ "$(pick_get "$1")" = 1 ]; then pick_set "$1" 0; else pick_set "$1" 1; fi; }
 
-# Defaults are what an unattended install would have done: every host that is
-# present, and nothing that is not. The status line stays OFF even on a machine
-# with Claude Code -- turning it on costs the user their footer key hints, so it
-# is offered here rather than assumed. The editor extensions are separate
-# artifacts with their own uninstall, so they are offered too.
-for _k in claude codex gemini amp; do
-  if host_present "$_k"; then pick_set "$_k" 1; else pick_set "$_k" 0; fi
-done
-pick_set statusline 0
-pick_set cursor 0
-pick_set code 0
+# Everything starts ticked, including hosts that are not installed yet: pressing
+# Enter is the whole install, and a host wired before it exists simply works the
+# day it arrives. Detection decides the "(not found)" note, not the box.
+#
+# The status line is the one row with a cost attached -- Claude Code hides most
+# of its footer key hints while any custom status line is set -- so it is ticked
+# but the cost is spelled out under the list, where somebody can untick it
+# BEFORE it happens rather than wondering afterwards where their hints went.
+for _k in $PICK_ROWS; do pick_set "$_k" 1; done
 
 pick_render() {
   say ""
@@ -412,8 +411,10 @@ pick_render() {
     printf '  %s %s. %s%s\n' "$_box" "$_n" "$(pick_label "$_k")" "$_note"
   done
   say ""
-  say "  ${D}A status line hides most of Claude Code's footer key hints, including"
-  say "  \"esc to interrupt\". That is Claude Code behaviour, not prmpt's.${R}"
+  say "  ${D}A host that is not there yet is still wired up, so it works the day you"
+  say "  install it. A status line hides most of Claude Code's footer key hints,"
+  say "  including \"esc to interrupt\" -- that is Claude Code behaviour, not prmpt's."
+  say "  Untick 2 to keep them.${R}"
   say ""
 }
 
