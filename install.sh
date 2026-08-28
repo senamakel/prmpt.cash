@@ -774,7 +774,6 @@ if [ "$CONFIGURED" -eq 0 ]; then
 fi
 
 if [ "$ENDPOINT" != "$DEFAULT_ENDPOINT" ]; then
-  say ""
   say "${Y}note${R} endpoint is $ENDPOINT -- export PRMPT_ENDPOINT to match in your shell."
 fi
 
