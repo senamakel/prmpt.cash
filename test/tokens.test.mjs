@@ -108,8 +108,14 @@ test('a token is never long enough to be a credential', () => {
   // Assembled at runtime on purpose. Spelling a live-key-shaped literal into a
   // file in a PUBLIC repo trips GitHub's push protection -- and it would be
   // indistinguishable from a real leak to anyone reading the history later.
-  const credentialShaped = ['sk', 'live', 'REDACTED-TEST-FIXTURE'].join('_');
+  const secret = 'Zq7Xm2Rt9Vb4Nh6Kd1Ls8Pw3Cy5Ge0Ja';
+  const credentialShaped = ['sk', 'live', secret].join('_');
   const tokens = signalTokens(`token ${credentialShaped}`);
+  // The whole credential must be gone, not merely shortened -- assert that
+  // directly rather than inferring it from a length bound, which a tokeniser
+  // that split the key into harmless-looking chunks would also satisfy.
+  assert.deepEqual(tokens, ['token'], `credential survived tokenisation: ${tokens}`);
+  assert.ok(!tokens.some((t) => secret.toLowerCase().includes(t)), 'a fragment of the key survived');
   assert.ok(tokens.every((t) => t.length <= 24), `over-long token survived: ${tokens}`);
 });
 
