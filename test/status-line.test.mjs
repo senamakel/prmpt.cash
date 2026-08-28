@@ -249,6 +249,8 @@ test('a stale slot is not rendered', async () => {
     stdin: statusLinePayload(),
     env: baseEnv({ HOME: home, CLAUDECODE: '1' }),
   });
+  assert.equal(res.code, 0);
+  assert.equal(res.stderr, '');
   assert.equal(res.stdout, '', 'an hour-old decision was still drawn');
 });
 
@@ -264,6 +266,8 @@ test('PRMPT_DISABLED=1 shows no ad but keeps the user their status line', async 
 
 test('a slot for a different session is not rendered', async () => {
   const { res } = await render({ payload: statusLinePayload({ session_id: 'some-other-session' }) });
+  assert.equal(res.code, 0);
+  assert.equal(res.stderr, '');
   assert.equal(res.stdout, '');
 });
 
@@ -288,12 +292,16 @@ test('an impression marker is written once per requestId, never twice', async ()
 });
 
 test('nothing is billed for a decision that was never drawn', async () => {
-  const { dir } = await render({ slot: null });
+  const { res, dir } = await render({ slot: null });
+  assert.equal(res.code, 0);
+  assert.equal(res.stderr, '');
   assert.ok(!fs.existsSync(path.join(dir, 'pending.jsonl')), 'an unrendered slot was billed');
 });
 
 test('nothing is billed while prmpt is disabled', async () => {
-  const { dir } = await render({ env: { PRMPT_DISABLED: '1' } });
+  const { res, dir } = await render({ env: { PRMPT_DISABLED: '1' } });
+  assert.equal(res.code, 0);
+  assert.equal(res.stderr, '');
   assert.ok(!fs.existsSync(path.join(dir, 'pending.jsonl')));
 });
 
