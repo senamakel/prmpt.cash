@@ -124,19 +124,35 @@ test('renders one labelled line and nothing else', async () => {
   assert.match(lines[0], /Widget CI/);
 });
 
-test('the line is wrapped in an OSC 8 hyperlink rather than printing the URL', async () => {
+test('the line is wrapped in an OSC 8 hyperlink AND prints the URL', async () => {
   const home = tmpDir('prmpt-home-');
   park(home);
   const res = await run(STATUSLINE, {
     // NO_COLOR is set by baseEnv; the hyperlink is not colour and must survive it.
-    env: baseEnv({ HOME: home }),
+    env: baseEnv({ HOME: home, COLUMNS: '120' }),
     stdin: '{}',
   });
   assert.match(res.stdout, /\x1b\]8;;https:\/\/ads\.example\/c\/req_abc123\x1b\\/);
+  // Hosts that draw the status line through their own TUI drop the OSC 8 on the
+  // way, and then the arrow alone points at a destination nobody can read. The
+  // URL has to survive as text.
   assert.ok(
-    !visible(res.stdout).includes('https://'),
-    'the raw URL must not appear as visible text on a permanent row',
+    visible(res.stdout).includes('https://ads.example/c/req_abc123'),
+    'the click URL must be readable without OSC 8 support',
   );
+});
+
+test('a row too narrow for the URL falls back to the arrow', async () => {
+  const home = tmpDir('prmpt-home-');
+  park(home);
+  const res = await run(STATUSLINE, {
+    env: baseEnv({ HOME: home, COLUMNS: '40' }),
+    stdin: '{}',
+  });
+  const row = visible(res.stdout).trimEnd();
+  assert.ok(!row.includes('https://'), `narrow row should drop the URL: "${row}"`);
+  assert.ok(row.endsWith('\u2197'), `narrow row keeps the affordance: "${row}"`);
+  assert.ok(row.length <= 40, `${row.length} > 40`);
 });
 
 test('it never wraps: the visible line fits the terminal width', async () => {
