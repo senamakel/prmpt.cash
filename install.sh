@@ -301,6 +301,10 @@ fi
 
 HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
+# The status-line surface: one hook to fetch a decision when the user presses
+# enter, and one command to render it in the footer while the model works.
+PROMPT_HOOK="$HOOK_DIR/hooks/prompt-start.mjs"
+STATUS_HOOK="$HOOK_DIR/hooks/status-line.mjs"
 
 # ------------------------------------------------------------------------ link
 CLI="$INSTALL_DIR/bin/prmpt.mjs"
@@ -334,6 +338,11 @@ fi
 #   Codex        Stop        ~/.codex/hooks.json        timeout SECONDS
 #   Gemini CLI   AfterAgent  ~/.gemini/settings.json    timeout MILLISECONDS
 #   Amp          agent.end   a TypeScript plugin file, not a hook at all
+#
+# Claude Code gets two more, because it is the only host with a status line:
+# UserPromptSubmit to fetch, and the statusLine setting to render. Codex and
+# Gemini CLI have no equivalent footer, so inventing one for them would wire up
+# a hook that could never display anything.
 merge_hook() {
   file="$1"; event="$2"; timeout="$3"; matcher="$4"; hookpath="$5"
   mkdir -p "$(dirname "$file")"
@@ -442,24 +451,34 @@ say ""
 say "${B}Wiring up agents${R} ${D}($SCOPE scope)${R}"
 CONFIGURED=0
 
-# Claude Code -- Stop, timeout in seconds.
+# Claude Code -- Stop, timeout in seconds, plus the status-line surface.
 if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected claude || [ -d "$HOME/.claude" ]; }; }; then
-  if merge_hook "$CLAUDE_CFG" "Stop" 5 ""; then
+  if merge_hook "$CLAUDE_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Claude Code  $CLAUDE_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
+    if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK"; then
+      ok "             ${D}+ UserPromptSubmit (fetches the status-line slot)${R}"
+    fi
+    if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK"; then
+      if [ -f "$STATE_FILE" ]; then
+        ok "             ${D}+ statusLine (wrapping the one you already had)${R}"
+      else
+        ok "             ${D}+ statusLine${R}"
+      fi
+    fi
   fi
 else skip "Claude Code not found"; fi
 
 # Codex -- Stop, timeout in seconds. Same event name as Claude Code; the hook
 # tells them apart by CLAUDECODE=1 at runtime.
 if { [ -n "$AGENTS" ] && want codex; } || { [ -z "$AGENTS" ] && { detected codex || [ -d "$HOME/.codex" ]; }; }; then
-  if merge_hook "$CODEX_CFG" "Stop" 5 ""; then
+  if merge_hook "$CODEX_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Codex        $CODEX_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Codex not found"; fi
 
 # Gemini CLI -- AfterAgent, timeout in MILLISECONDS, and it wants a matcher.
 if { [ -n "$AGENTS" ] && want gemini; } || { [ -z "$AGENTS" ] && { detected gemini || [ -d "$HOME/.gemini" ]; }; }; then
-  if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*"; then
+  if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*" "$HOOK"; then
     ok "Gemini CLI   $GEMINI_CFG  ${D}(AfterAgent, ms)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Gemini CLI not found"; fi
