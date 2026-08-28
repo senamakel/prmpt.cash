@@ -88,9 +88,15 @@ export function smokeEnv(home, extra = {}) {
     //                 test that never runs the installer can reach production.
     //   NO_AUTO_UPDATE an installed copy is not a git checkout, so the hook
     //                 would spawn a daily updater against api.github.com.
+    //   NO_PATH_PERSIST install.ps1 adds its shim directory to the user PATH,
+    //                 in the registry. That is the one piece of machine state
+    //                 these tests can create that outlives the sandbox HOME:
+    //                 without this, every Windows run appends a dead directory
+    //                 to the developer's real PATH and never takes it back.
     PRMPT_NO_LOGIN: '1',
     PRMPT_NO_AUTO_ENROL: '1',
     PRMPT_NO_AUTO_UPDATE: '1',
+    PRMPT_NO_PATH_PERSIST: '1',
   };
   if (IS_WINDOWS) {
     env.USERPROFILE = home;
