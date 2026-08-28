@@ -424,38 +424,45 @@ else skip "Amp not found"; fi
 # things to somebody's editor is not one people should pipe into sh.
 install_editor_ext() {
   _bin="$1"; _name="$2"
-  command -v "$_bin" >/dev/null 2>&1 || return 1
 
+  # A checkout or an unpacked release may carry the built vsix beside it; a
+  # normal install downloads it from the same release as the tarball, so the
+  # two can never be from different versions.
   _vsix=""
-  if [ -f "$INSTALL_DIR/vscode/prmpt-vscode.vsix" ]; then
-    _vsix="$INSTALL_DIR/vscode/prmpt-vscode.vsix"
-  else
-    _ver=$(node -p 'require("'"$INSTALL_DIR"'/package.json").version' 2>/dev/null) || return 1
-    _vsix="$TMP/prmpt-vscode-$_ver.vsix"
-    _url="https://github.com/$RELEASE_REPO/releases/download/v$_ver/prmpt-vscode-$_ver.vsix"
-    curl -fsSL "$_url" -o "$_vsix" 2>/dev/null || return 1
+  for _cand in "$INSTALL_DIR"/vscode/prmpt-vscode-*.vsix "$INSTALL_DIR"/vscode/*.vsix; do
+    [ -f "$_cand" ] && { _vsix="$_cand"; break; }
+  done
+
+  if [ -z "$_vsix" ]; then
+    _ver=$(node -p "require('$INSTALL_DIR/package.json').version" 2>/dev/null) || return 1
+    [ -n "$_ver" ] || return 1
+    _tmp=$(mktemp -d)
+    _vsix="$_tmp/prmpt-vscode-$_ver.vsix"
+    _url="https://github.com/$REPO_SLUG/releases/download/v$_ver/prmpt-vscode-$_ver.vsix"
+    curl -fsSL "$_url" -o "$_vsix" 2>/dev/null || { rm -rf "$_tmp"; return 1; }
   fi
 
-  "$_bin" --install-extension "$_vsix" --force >/dev/null 2>&1 || return 1
-  ok "$_name       extension installed  ${D}(reload the window)${R}"
-  return 0
+  if "$_bin" --install-extension "$_vsix" --force >/dev/null 2>&1; then
+    ok "$_name extension installed  ${D}(reload the window)${R}"
+    return 0
+  fi
+  return 1
+}
+
+offer_editor_ext() {
+  _bin="$1"; _name="$2"
+  command -v "$_bin" >/dev/null 2>&1 || return 0
+  if [ "${EDITOR_EXT:-}" = "1" ]; then
+    install_editor_ext "$_bin" "$_name" \
+      || warn "$_name found but the extension could not be installed."
+  else
+    skip "$_name found -- re-run with --editor to add the sidebar card"
+  fi
 }
 
 if [ "${EDITOR_EXT:-}" != "0" ]; then
-  _did_editor=0
-  for _pair in "cursor Cursor" "code 'VS Code'"; do
-    # shellcheck disable=SC2086
-    set -- $_pair
-    if command -v "$1" >/dev/null 2>&1; then
-      if [ "${EDITOR_EXT:-}" = "1" ]; then
-        install_editor_ext "$1" "$2" && _did_editor=1
-      else
-        skip "$2 found -- run with --editor to add the sidebar card too"
-        _did_editor=1
-      fi
-    fi
-  done
-  unset _did_editor
+  offer_editor_ext cursor Cursor
+  offer_editor_ext code "VS Code"
 fi
 
 # ----------------------------------------------------------------------- done
