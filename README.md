@@ -220,10 +220,27 @@ Being honest about what that does and does not guarantee:
 
 ## Two places an ad can appear
 
-| Surface | When | Where | Hosts |
-|---|---|---|---|
-| End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp |
-| Status line | while the model is working | one dim row above your prompt | **Claude Code only** |
+| Surface | When | Where | Hosts | |
+|---|---|---|---|---|
+| End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp | on by default |
+| Status line | while the model is working | one dim row above your prompt | **Claude Code only** | **opt-in** |
+
+**The status line is opt-in, and stays off until you ask for it.** Claude Code
+hides most of its footer keyboard hints — including `esc to interrupt` — the
+moment *any* custom status line is set. That is Claude Code's behaviour, not
+ours, but it is a real cost, and trading somebody's keybinding hints for an ad
+placement is not a choice an installer gets to make on their behalf. So a
+default install wires the end-of-turn line and nothing else, and says so.
+
+```sh
+$ prmpt statusline install     # also: status, preview, uninstall
+$ curl ... | sh -s -- --statusline    # or ask for it up front
+```
+
+Either route turns on the whole surface: the row itself, and the
+`UserPromptSubmit` hook that fetches something fresher to put in it.
+`prmpt statusline uninstall` removes both, and gives back any status line you
+already had.
 
 **The status line is Claude Code only, on purpose.** Codex and Gemini CLI have no
 equivalent footer, and inventing config for them would wire up something that
@@ -270,13 +287,11 @@ Three more things worth knowing:
 - **Claude Code hides most of its footer key hints while a custom status line is
   set** — including `esc to interrupt`. That is Claude Code's behaviour, not
   ours. Removing the status line brings them back.
-- The `/plugin install` route wires the hooks but **not** the status line.
+- The `/plugin install` route wires the end-of-turn hook and **nothing else**.
   `statusLine` is a settings key rather than a hook, and a Claude Code plugin can
-  only declare hooks, so the footer needs `install.sh`, `install.ps1`, or:
-
-```sh
-$ prmpt statusline install     # also: status, preview, uninstall
-```
+  only declare hooks, so there would be nowhere to draw the row — which is also
+  why that route does not carry the `UserPromptSubmit` fetch hook. Use
+  `prmpt statusline install` to add the surface.
 
 ## What it looks like
 
