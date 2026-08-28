@@ -293,6 +293,7 @@ See [`.env.example`](.env.example) for every knob.
 | Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
 | Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
 | Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
+| Cursor | `afterAgentResponse` | plus the editor extension for display. See [`vscode/`](vscode/README.md) |
 
 Those units and event names are not interchangeable; the installer handles each
 correctly. Per-host detail lives in [`codex/`](codex/README.md),
