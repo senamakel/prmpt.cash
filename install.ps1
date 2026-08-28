@@ -648,5 +648,6 @@ if ($NoOnboard -or -not (Test-Path $cfgFile)) {
     Write-Warn "  node $Cli onboard"
   }
 }
+Write-Host ''
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"
