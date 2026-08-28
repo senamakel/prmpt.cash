@@ -164,7 +164,7 @@ test('a chained command that fails leaves us printing our own row only', async (
   const { res, out } = await render({ chain: priorStatusLine('', { exitCode: 3 }) });
   assert.equal(res.code, 0, 'their failure must not become ours');
   assert.equal(res.stderr, '');
-  assert.match(adRow(out), /^Sponsored · /);
+  assert.match(adRow(out), /^Quarantine flaky tests/);
 });
 
 test('a chained command that hangs does not hang the status line', async () => {
@@ -181,7 +181,7 @@ test('a chained command that is our own script is refused, never recursed into',
   });
   assert.equal(res.code, 0);
   assert.ok(res.ms < 5000, 'the renderer recursed into itself');
-  assert.match(adRow(out), /^Sponsored · /);
+  assert.match(adRow(out), /^Quarantine flaky tests/);
 });
 
 test('PRMPT_DISABLED=1 shows no ad but keeps the user their status line', async () => {
@@ -191,7 +191,7 @@ test('PRMPT_DISABLED=1 shows no ad but keeps the user their status line', async 
   });
   assert.equal(res.code, 0);
   assert.equal(visible(out), 'my-repo (main)', 'disabling prmpt must not touch their line');
-  assert.ok(!out.includes('Sponsored'));
+  assert.ok(!out.includes('Quarantine flaky tests'));
 });
 
 test('no slot still prints the chained status line untouched', async () => {
@@ -217,7 +217,7 @@ test('escape sequences in the headline are never handed to the terminal', async 
   const { out } = await render({
     slot: { ...AD, headline: 'Buy\x1b[2J\x1b[Hthis\x07 now\r\nsecond line' },
   });
-  const afterLabel = out.slice(out.indexOf('Sponsored'));
+  const afterLabel = adRow(out);
   assert.ok(!afterLabel.includes('\x1b[2J'), 'a screen-clear reached the terminal');
   assert.ok(!afterLabel.includes('\x07'), 'a bell reached the terminal');
   assert.equal(out.split('\n').length, 1, 'the headline broke the line in two');
@@ -232,5 +232,5 @@ test('a clickUrl that is not a plain http URL is not made into a link', async ()
   assert.equal(res.code, 0);
   assert.ok(!out.includes('PWNED'), 'the injected payload reached the terminal');
   assert.ok(!out.includes('\x1b]8;;'), 'an unsafe URL was still turned into a link');
-  assert.match(adRow(out), /^Sponsored · /, 'the ad text itself should still render');
+  assert.match(adRow(out), /^Quarantine flaky tests/, 'the ad text itself should still render');
 });

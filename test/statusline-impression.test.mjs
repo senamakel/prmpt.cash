@@ -79,7 +79,7 @@ test('a parked turn-end ad is rendered but never billed as a status-line impress
 
   const rendered = await draw(home, 5);
   for (const [i, out] of rendered.entries()) {
-    assert.ok(out.includes('Sponsored'), `render ${i} drew nothing -- the fallback must still show`);
+    assert.ok(out.includes(AD.headline), `render ${i} drew nothing -- the fallback must still show`);
   }
 
   assert.deepEqual(
@@ -94,7 +94,7 @@ test('a prompt-fetched ad is billed exactly once, however many times it is drawn
 
   const rendered = await draw(home, 5);
   for (const [i, out] of rendered.entries()) {
-    assert.ok(out.includes('Sponsored'), `render ${i} drew nothing`);
+    assert.ok(out.includes(AD.headline), `render ${i} drew nothing`);
   }
 
   assert.deepEqual(
@@ -115,7 +115,7 @@ test('a slot with no filler recorded is treated as parked, and is not billed', a
   fs.writeFileSync(file, JSON.stringify(raw), { mode: 0o600 });
 
   const [out] = await draw(home);
-  assert.ok(out.includes('Sponsored'), 'an older slot stopped rendering');
+  assert.ok(out.includes(AD.headline), 'an older slot stopped rendering');
   assert.deepEqual(billed(pending), [], 'a slot from before fillers existed was billed');
 });
 

@@ -120,7 +120,7 @@ test('renders one labelled line and nothing else', async () => {
   assert.equal(res.stderr, '');
   const lines = visible(res.stdout).trimEnd().split('\n');
   assert.equal(lines.length, 1, 'the status line is permanent -- one row only');
-  assert.match(lines[0], /^Sponsored · /);
+  assert.match(lines[0], /^Ship faster with Widget CI/);
   assert.match(lines[0], /Widget CI/);
 });
 
@@ -237,7 +237,7 @@ test("a pre-existing status line is kept, and ours sits beneath it", async () =>
   const lines = visible(res.stdout).trimEnd().split('\n');
   assert.equal(lines.length, 2);
   assert.equal(lines[0], 'my own status line');
-  assert.match(lines[1], /^Sponsored · /);
+  assert.match(lines[1], /^Ship faster with Widget CI/);
 });
 
 test('a broken chained command does not take our line down with it', async () => {
@@ -253,7 +253,7 @@ test('a broken chained command does not take our line down with it', async () =>
   });
   assert.equal(res.code, 0);
   assert.equal(res.stderr, '');
-  assert.match(visible(res.stdout), /^Sponsored · /);
+  assert.match(visible(res.stdout), /^Ship faster with Widget CI/);
 });
 
 test('in single-row hosts a chained status line wins over the ad', async () => {
