@@ -177,11 +177,55 @@ async function cmdLogin(args) {
   }
 
   out('Clicks on ads served from this install now pay 70% of the clearing price');
-  out('to your wallet, in whichever token you choose. Change it, and see what you');
-  out("have earned, with 'prmpt dashboard'. Set PRMPT_DISABLED=1 to stop serving.");
+  out('to your wallet, in whichever token you choose. Set PRMPT_DISABLED=1 to');
+  out('stop serving.');
   out('');
   out('The token cannot be revoked from here or anywhere else -- it is valid until');
   out('it expires. Treat the config file as a credential.');
+  out('');
+
+  await handOffToOnboarding({ endpoint, token: result.token, open: !args.includes('--no-open') });
+}
+
+/**
+ * Print, and open, the link that finishes setup on the web.
+ *
+ * The split is the same one `prmpt dashboard` exists for: the plugin holds
+ * keys, and everything a person might want to CHOOSE -- which token they are
+ * paid in, which accounts vouch for them -- lives on the web where it can have
+ * a real interface.
+ *
+ * This is BEST EFFORT and never throws. Signing in has already succeeded by
+ * the time it runs, the token is already on disk, and a transient failure on a
+ * second round trip must not turn a good login into a non-zero exit -- the same
+ * rule the Base link follows. When it fails, the fallback is a command the
+ * user can run themselves, which is also what they need when the two-minute
+ * code expires before they get to it.
+ */
+async function handOffToOnboarding({ endpoint, token, open }) {
+  let url;
+  try {
+    const session = await createWebSession({ endpoint, token });
+    url = webSessionURL(session.url, '/onboarding');
+  } catch {
+    out('Finish setting up -- connect a GitHub or X account to lift the daily');
+    out("earnings cap, and pick your payout token -- with 'prmpt onboard'.");
+    return;
+  }
+
+  out('One more step. This link opens your account on the web, already signed');
+  out('in, where you can connect a GitHub or X account to lift the daily');
+  out('earnings cap and choose which token you are paid in:');
+  out('');
+  out(`  ${url}`);
+  out('');
+  out("It is single use and expires in two minutes. For a fresh one: prmpt onboard");
+
+  if (!open) return;
+  if (!openInBrowser(url)) {
+    out('');
+    out('Could not open a browser here. Paste the link above into one.');
+  }
 }
 
 function cmdStatus() {
