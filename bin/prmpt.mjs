@@ -135,7 +135,7 @@ ${RELEASE_REPO} for a newer release and, if there is one, verifies its
 checksum and swaps this directory for it. Your token and wallet key live in
 ~/.config/prmpt and are never touched by that.
 
-One seed phrase holds both chains: a Solana address (SOL, TINY, XAUT) and a
+One seed phrase holds both chains: a Solana address (SOL, TINY, ANT) and a
 Base address (USDC, BTC, ETH). Which one is paid follows from the token you
 choose on the dashboard.
 
@@ -187,7 +187,7 @@ async function cmdLogin(args) {
   // default token is not one of them.
   if (!result.evmLinked) {
     err(`prmpt: warning -- could not link the Base address: ${result.evmError}`);
-    err('  Solana payouts (SOL, TINY, XAUT) still work. ERC-20 earnings will');
+    err('  Solana payouts (SOL, TINY, ANT) still work. ERC-20 earnings will');
     err("  accrue but cannot be sent until this succeeds. Re-run 'prmpt login'.");
     err('');
   }
