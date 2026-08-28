@@ -55,9 +55,22 @@ test('an unknown flag fails loudly rather than installing something unexpected',
   assert.ok(!fs.existsSync(box.dir), 'nothing should have been installed');
 });
 
+/**
+ * Wire every host, optionally asking for the opt-in status-line surface.
+ *
+ * `--statusline` is what turns the second surface on. Without it the installer
+ * writes the end-of-turn hook and nothing else, which is the default every real
+ * user gets.
+ */
+async function installAll(box, { statusLine = false } = {}) {
+  const args = ['--agents', ALL_AGENTS, '--dir', box.dirArg];
+  if (statusLine) args.push('--statusline');
+  return install(box, args);
+}
+
 test('a forced install wires up every host with its own event and timeout unit', async () => {
   const box = sandbox();
-  const res = await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  const res = await installAll(box, { statusLine: true });
   assert.equal(res.code, 0, `installer failed:\n${res.stdout}\n${res.stderr}`);
 
   // The plugin itself landed.
@@ -69,6 +82,7 @@ test('a forced install wires up every host with its own event and timeout unit',
     assert.ok(fs.existsSync(file), `${host.label}: ${file} was not written`);
     const config = readJSON(file);
 
+    const statusLineEvents = host.statusLineEvents;
     const mine = ourEntries(config, host.event);
     assert.equal(mine.length, 1, `${host.label}: expected exactly one entry under ${host.event}`);
 
