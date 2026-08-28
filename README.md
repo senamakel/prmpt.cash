@@ -84,15 +84,41 @@ git clone https://github.com/senamakel/prmpt.cash
 <summary>Options</summary>
 
 ```
+-y, --yes            skip the picker and take the autodetected defaults
 --no-login           install and wire up the agents, but create no wallet
+--no-onboard         do not open the setup page in a browser at the end
 --version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
+--statusline         also draw the ad on Claude Code's status line
+--editor             also install the VS Code / Cursor extension
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
 --project            configure ./ instead of your home directory
 --uninstall          remove the hooks and the installed copy
 ```
 </details>
+
+On a terminal, the installer asks where it should install itself before it
+touches anything — every host it found is pre-ticked, the status line and the
+editor extensions are not, and you toggle by number:
+
+```
+  [x] 1. Claude Code   Stop -- the line at the end of a turn
+  [ ] 2.   status line the same ad above your prompt while it thinks
+  [x] 3. Codex         Stop -- the line at the end of a turn
+  [ ] 4. Gemini CLI    AfterAgent -- the line at the end of a turn  (not found)
+  ...
+  Number to toggle, a all, n none, Enter to install, q to quit:
+```
+
+It reads `/dev/tty`, not stdin, so it works under `curl ... | sh` where stdin is
+the script itself. Pass `--agents` or `-y` and it never appears — a Dockerfile,
+CI or a provisioning script takes exactly the path it always did.
+
+The last thing it does is open your account on the web, already signed in, so
+you can connect a GitHub or X account to lift the daily earnings cap and pick
+which token you are paid in. That link is single-use and expires in two minutes;
+`prmpt onboard` mints a fresh one whenever you want it.
 
 Re-running is safe. It upgrades in place, and replaces its own hook entry rather
 than appending, so you cannot end up with duplicates.
