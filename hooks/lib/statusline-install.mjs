@@ -1,20 +1,35 @@
-// prmpt -- wiring the status line into Claude Code and Codex.
+// prmpt -- wiring the status line into Claude Code.
 //
-// Both hosts document an external-command status line, so this whole surface is
-// two config edits and nothing else. Nothing here patches, repacks or re-signs
-// an application; the plugin owns two keys in two files it is invited to write,
-// and `uninstall` puts both back.
+// Claude Code documents an external-command status line, so this whole surface
+// is one config edit and nothing else. Nothing here patches, repacks or
+// re-signs an application; the plugin owns one key in one file it is invited to
+// write, and `uninstall` puts it back.
 //
-//   Claude Code  ~/.claude/settings.json   "statusLine": { type, command, ... }
-//   Codex        ~/.codex/config.toml      [tui] status_line = [argv...]
+//   ~/.claude/settings.json   "statusLine": { type: "command", command: ... }
 //
-// Two rules govern the edits:
+// Two rules govern the edit:
 //
 //   - Chain, never clobber. A status line someone configured themselves is not
 //     ours to delete. Whatever was there is stashed and run by our renderer,
 //     with its output kept above ours.
-//   - Every write is reversible. The pre-install value of each key we touch is
-//     recorded once, at first install, and restored verbatim on uninstall.
+//   - It is reversible. The pre-install value is recorded once, at first
+//     install, and restored verbatim on uninstall.
+//
+// Codex is deliberately absent. Its `[tui] status_line` accepts identifiers
+// from a closed set of built-in items -- `model-with-reasoning`, `current-dir`,
+// `git-branch`, `context-used` and so on -- and cannot run a command at all.
+// Verified against the codex 0.150.1 binary: there is a validation path
+// reporting "configuration contains unknown item identifiers", and the
+// `status_line_timeout_ms` key that a competing implementation writes does not
+// exist in the binary. openai/codex#17827 is the open feature request for
+// command-backed status lines; #20244 was closed as its duplicate.
+//
+// Writing an argv there would produce startup warnings and render nothing. This
+// is exactly the failure CLAUDE.md warns about, so it is recorded rather than
+// attempted. Codex is otherwise unaffected: its `Stop` hook still supplies turn
+// text, still gets a match, still prints the end-of-turn line, and still parks
+// a slot -- which the VS Code / Cursor extension can render even though Codex
+// itself has nowhere to put it.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -26,12 +41,23 @@ import { pluginRoot } from './version.mjs';
 /** Recognises our own command so a re-install doesn't chain itself. */
 const MARKER = 'prmpt';
 
+/**
+ * What installing costs the user, printed before anything is written.
+ *
+ * Claude Code drops most of its footer keyboard hints -- `esc to interrupt`
+ * among them -- as soon as a custom status line exists. That is a real trade
+ * and the user has to make it knowingly, which is also why this surface is
+ * opt-in and is not wired in by install.sh.
+ */
+export const CLAUDE_TRADE_OFF = [
+  'Claude Code hides most of its footer keyboard hints -- including',
+  '"esc to interrupt" -- whenever a custom status line is configured.',
+  'That is Claude Code behaviour, not something prmpt chooses.',
+  "Run 'prmpt statusline uninstall' to get them back.",
+];
+
 export function claudeSettingsPath() {
   return path.join(os.homedir(), '.claude', 'settings.json');
-}
-
-export function codexConfigPath() {
-  return path.join(os.homedir(), '.codex', 'config.toml');
 }
 
 function backupDir() {
@@ -59,11 +85,9 @@ function writeJson(file, value, mode = 0o600) {
 /**
  * The chained status line, if the renderer should run one.
  *
- * A single file for both hosts would be wrong: someone can run Claude Code and
- * Codex on the same machine with different status lines configured, and the
- * renderer must run the one belonging to the host that invoked it. The host is
- * identified the same way the turn hook identifies it -- CLAUDECODE=1 is set
- * only by Claude Code.
+ * Keyed by host so that a machine running more than one agent keeps them
+ * separate. Only Claude Code can install today, but the renderer is written
+ * against the general case.
  */
 export function readChain(host = process.env.CLAUDECODE === '1' ? 'claude' : 'codex') {
   return readJson(chainPath(host));
@@ -74,11 +98,6 @@ export function renderCommand() {
   return `node "${path.join(pluginRoot(), 'hooks', 'statusline.mjs')}"`;
 }
 
-/** The argv Codex should run. Codex takes an array, so no quoting is needed. */
-export function renderArgv() {
-  return ['node', path.join(pluginRoot(), 'hooks', 'statusline.mjs'), '--line'];
-}
-
 // --- Claude Code ------------------------------------------------------------
 
 export function claudeStatus() {
@@ -87,6 +106,7 @@ export function claudeStatus() {
   return {
     host: 'claude-code',
     path: claudeSettingsPath(),
+    supported: true,
     present: fs.existsSync(claudeSettingsPath()),
     installed: typeof command === 'string' && command.includes(MARKER),
     chained: readJson(chainPath('claude')) !== null,
@@ -112,12 +132,13 @@ export function installClaude() {
     try { fs.rmSync(chainPath('claude'), { force: true }); } catch { /* ignore */ }
   }
 
+  // No `refreshInterval`. Claude Code already re-runs the command on events,
+  // and the end of a turn is one of them -- which is the only moment our slot
+  // can change. An interval on top of that would spawn a process every few
+  // seconds for the life of every session and never find anything new.
   settings.statusLine = {
     type: 'command',
     command: renderCommand(),
-    // The slot only changes at the end of a turn, so there is nothing to gain
-    // from a tighter refresh -- and every refresh is a process spawn.
-    refreshInterval: 5,
     padding: 0,
   };
 
@@ -146,181 +167,27 @@ export function uninstallClaude() {
   return { path: file, changed: true, restored: chain || null };
 }
 
-// --- Codex ------------------------------------------------------------------
-
-// Codex's config is TOML and the plugin has no dependencies, so the edit is
-// textual. It is scoped to the [tui] table rather than done with a global
-// regex: `status_line` is a plausible key name under another table, and a
-// file-wide substitution would silently rewrite somebody else's setting.
-
-const TUI_HEADER_RE = /^[ \t]*\[tui\][ \t]*$/m;
-const ANY_HEADER_RE = /^[ \t]*\[[^\]]+\][ \t]*$/m;
-
-/** Byte range of the [tui] table's body, or null when there is no [tui] table. */
-function tuiRange(text) {
-  const header = TUI_HEADER_RE.exec(text);
-  if (!header) return null;
-  const start = header.index + header[0].length;
-  const rest = text.slice(start);
-  const next = ANY_HEADER_RE.exec(rest);
-  return { start, end: next ? start + next.index : text.length };
-}
-
-function findKeyLine(body, key) {
-  const re = new RegExp(`^[ \\t]*${key}[ \\t]*=.*$`, 'm');
-  const m = re.exec(body);
-  return m ? { raw: m[0], index: m.index, length: m[0].length } : null;
-}
-
-/** Replace the [tui] body with `next`, returning the whole file. */
-function spliceTui(text, range, next) {
-  return text.slice(0, range.start) + next + text.slice(range.end);
-}
-
-/** Parse the argv array out of `status_line = [ ... ]`, or null. */
-function parseArgv(raw) {
-  const m = /=\s*(\[[\s\S]*\])/.exec(raw || '');
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1]);
-    return Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+// --- reporting --------------------------------------------------------------
 
 /**
- * Is this status_line value a command we can chain, rather than Codex's
- * built-in list of status items? Only the former is runnable.
+ * Why Codex cannot have this surface, carried in the status output so the
+ * answer is one command away rather than a thing somebody rediscovers by
+ * writing a config that silently does nothing.
  */
-function looksRunnable(argv) {
-  if (!Array.isArray(argv) || !argv.length) return false;
-  const first = String(argv[0]);
-  return first.includes('/') || first.includes('\\') || fs.existsSync(first);
-}
-
-function readText(file) {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
 export function codexStatus() {
-  const file = codexConfigPath();
-  const text = readText(file);
-  const range = tuiRange(text);
-  const line = range ? findKeyLine(text.slice(range.start, range.end), 'status_line') : null;
   return {
     host: 'codex',
-    path: file,
-    present: fs.existsSync(file),
-    installed: Boolean(line && line.raw.includes(MARKER)),
-    chained: readJson(chainPath('codex')) !== null,
+    path: path.join(os.homedir(), '.codex', 'config.toml'),
+    supported: false,
+    reason: '[tui] status_line takes built-in item ids, not a command (openai/codex#17827)',
+    note: 'Codex still serves ads through its Stop hook, and its turns still park a slot.',
   };
 }
 
-export function installCodex() {
-  const file = codexConfigPath();
-  let text = readText(file);
-  let range = tuiRange(text);
-
-  if (!range) {
-    text = `${text.replace(/\s*$/, '')}${text.trim() ? '\n\n' : ''}[tui]\n`;
-    range = tuiRange(text);
-  }
-
-  let body = text.slice(range.start, range.end);
-  const existing = findKeyLine(body, 'status_line');
-  const existingTimeout = findKeyLine(body, 'status_line_timeout_ms');
-
-  const backup = path.join(backupDir(), 'codex.status_line.json');
-  if (!fs.existsSync(backup)) {
-    writeJson(backup, {
-      hadFile: fs.existsSync(file),
-      statusLine: existing ? existing.raw : null,
-      timeout: existingTimeout ? existingTimeout.raw : null,
-    });
-  }
-
-  const isOurs = existing && existing.raw.includes(MARKER);
-  if (existing && !isOurs) {
-    const argv = parseArgv(existing.raw);
-    if (looksRunnable(argv)) writeJson(chainPath('codex'), { argv });
-    else {
-      // A built-in item list is not a command, so it cannot be chained -- and
-      // Codex gives us one row. Refuse rather than silently replace it.
-      throw new Error(
-        `prmpt: ${file} already sets a built-in [tui] status_line. Remove it first, or run with --force.`,
-      );
-    }
-  } else if (!existing) {
-    try { fs.rmSync(chainPath('codex'), { force: true }); } catch { /* ignore */ }
-  }
-
-  // Strip only the two keys we manage, inside [tui] only, so a re-install never
-  // leaves a duplicate.
-  for (const key of ['status_line', 'status_line_timeout_ms']) {
-    const found = findKeyLine(body, key);
-    if (found) {
-      body = body.slice(0, found.index) + body.slice(found.index + found.length);
-    }
-  }
-
-  const block = [
-    `status_line = ${JSON.stringify(renderArgv())} # ${MARKER}`,
-    // The renderer reads one small file and may spawn a chained command; 1500ms
-    // is the same budget the turn hook works to.
-    'status_line_timeout_ms = 1500',
-  ].join('\n');
-
-  body = `\n${block}\n${body.replace(/^\n+/, '')}`;
-  let out = spliceTui(text, range, body).replace(/\n{3,}/g, '\n\n');
-  if (!out.endsWith('\n')) out += '\n';
-
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, out);
-  return { path: file, chained: existing && !isOurs ? existing.raw : null };
-}
-
-export function uninstallCodex() {
-  const file = codexConfigPath();
-  let text = readText(file);
-  if (!text) return { path: file, changed: false };
-  const range = tuiRange(text);
-  if (!range) return { path: file, changed: false };
-
-  let body = text.slice(range.start, range.end);
-  const existing = findKeyLine(body, 'status_line');
-  if (existing && !existing.raw.includes(MARKER)) {
-    // Replaced by something else since we installed. Not ours to remove.
-    return { path: file, changed: false };
-  }
-
-  for (const key of ['status_line', 'status_line_timeout_ms']) {
-    const found = findKeyLine(body, key);
-    if (found) body = body.slice(0, found.index) + body.slice(found.index + found.length);
-  }
-
-  const restore = readJson(path.join(backupDir(), 'codex.status_line.json'));
-  const lines = [restore?.statusLine, restore?.timeout].filter(Boolean);
-  if (lines.length) body = `\n${lines.join('\n')}\n${body.replace(/^\n+/, '')}`;
-
-  let out = spliceTui(text, range, body).replace(/\n{3,}/g, '\n\n');
-  if (!out.endsWith('\n')) out += '\n';
-  fs.writeFileSync(file, out);
-  try { fs.rmSync(chainPath('codex'), { force: true }); } catch { /* ignore */ }
-  return { path: file, changed: true, restored: restore?.statusLine || null };
-}
-
-// --- both -------------------------------------------------------------------
-
-/** Which hosts are actually present on this machine. */
+/** Which hosts are present on this machine and can actually be installed into. */
 export function detectHosts() {
   const hosts = [];
   if (fs.existsSync(path.dirname(claudeSettingsPath()))) hosts.push('claude');
-  if (fs.existsSync(path.dirname(codexConfigPath()))) hosts.push('codex');
   return hosts;
 }
 
