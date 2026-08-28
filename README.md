@@ -98,10 +98,14 @@ git clone https://github.com/senamakel/prmpt.cash
 ```
 </details>
 
-On a terminal, the installer asks where it should install itself before it
-touches anything. Everything is ticked — Enter installs the lot, including
-hosts you have not installed yet, which are wired up so they work the day you
-do. Untick by number:
+The install is three steps. **Step 1** says what it does before it does any of
+it: what leaves the machine (the final text of a finished turn, nothing else),
+what it costs (one request, a hard 1.5s budget, fails open and silent), what you
+earn, and how to switch it off.
+
+**Step 2** asks where it should go, before it fetches or writes anything.
+Everything is ticked — Enter installs the lot, including hosts you have not
+installed yet, which are wired up so they work the day you do. Untick by number:
 
 ```
   [x] 1. Claude Code   Stop -- the line at the end of a turn
@@ -121,9 +125,10 @@ It reads `/dev/tty`, not stdin, so it works under `curl ... | sh` where stdin is
 the script itself. Pass `--agents` or `-y` and it never appears — a Dockerfile,
 CI or a provisioning script takes exactly the path it always did.
 
-The last thing it does is open your account on the web, already signed in, so
-you can connect a GitHub or X account to lift the daily earnings cap and pick
-which token you are paid in. That link is single-use and expires in two minutes;
+**Step 3** opens your account on the web, already signed in, where the rest of
+setup lives: pick which token you are paid in, and connect a GitHub or X account
+to lift the daily earnings cap. Your keys never leave the machine — the browser
+gets a single-use code, not the wallet. That code expires in two minutes;
 `prmpt onboard` mints a fresh one whenever you want it.
 
 Re-running is safe. It upgrades in place, and replaces its own hook entry rather
