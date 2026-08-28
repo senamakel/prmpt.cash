@@ -7,8 +7,10 @@
 
     1. checks Node >= 18            (the hook is plain ESM, no dependencies)
     2. copies the plugin to a stable directory
-    3. creates a wallet and signs in with it
-    4. wires up every agent it finds, using that agent's own documented hook
+    3. asks where to install itself, on a console; -Yes or -Agents skips it
+    4. creates a wallet and signs in with it
+    5. wires up every agent it chose, using that agent's own documented hook
+    6. opens the setup page on the web, signed in (-NoOnboard skips it)
 
   Idempotent: run it again to upgrade, re-point, or add an agent. Existing
   config files are backed up before they are touched, and our own hook entry is
