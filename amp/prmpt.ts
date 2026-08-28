@@ -72,6 +72,9 @@ export default function (amp: PluginAPI) {
             input: {
               installId: process.env.PRMPT_INSTALL_ID ?? 'amp',
               sessionId: String((event as { thread?: { id?: string } }).thread?.id ?? 'amp'),
+              // Which of the backend's two ad surfaces this is. Amp has no
+              // status line, so it is always the end of a turn.
+              surface: 'TURN_END',
               turnText,
               harness: 'amp',
             },

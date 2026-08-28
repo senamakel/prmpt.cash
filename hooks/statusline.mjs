@@ -20,9 +20,9 @@ import fs from 'node:fs';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 
-import { readSlot } from './lib/slot.mjs';
-import { readChain } from './lib/statusline-install.mjs';
-import { composeStatusLine } from './lib/statusline-render.mjs';
+import { claimImpression, readSlot } from './lib/slot.mjs';
+import { isOurCommand, readChain } from './lib/statusline-install.mjs';
+import { composeStatusLineParts } from './lib/statusline-render.mjs';
 
 /** How long a chained status-line command may take before we give up on it. */
 const CHAIN_TIMEOUT_MS = 1200;
@@ -45,6 +45,10 @@ function readStdin() {
  */
 function runChain(chain, stdin) {
   try {
+    // Refuse our own script. A re-install that recorded us as the thing to
+    // chain would otherwise fork a new copy of this process on every single
+    // render, forever, which is a fork bomb wearing a status line.
+    if (chain && isOurCommand(chain.command)) return '';
     if (chain && Array.isArray(chain.argv) && chain.argv.length) {
       const r = spawnSync(chain.argv[0], chain.argv.slice(1), {
         input: stdin,
@@ -117,7 +121,7 @@ function main() {
   const ad = readSlot({ sessionId });
   const chained = runChain(readChain(), stdin);
 
-  const out = composeStatusLine({
+  const { text, adRendered } = composeStatusLineParts({
     ad,
     chained,
     mode,
@@ -125,7 +129,13 @@ function main() {
     color: !process.env.NO_COLOR,
   });
 
-  if (out) process.stdout.write(`${out}\n`);
+  if (text) process.stdout.write(`${text}\n`);
+
+  // Only once the ad is genuinely going out, and only after it has been
+  // written: claiming is a compare-and-set on the slot file, and it is what
+  // appends to the pending log the next hook flushes to the backend.
+  if (adRendered && ad) claimImpression(ad.requestId, { sessionId });
+
   process.exit(0);
 }
 

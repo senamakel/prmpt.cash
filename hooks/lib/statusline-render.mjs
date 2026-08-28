@@ -24,7 +24,7 @@ const DIM = `${ESC}[2m`;
 
 /** Wrap text in an OSC 8 hyperlink. Terminals that don't support it show the text. */
 export function hyperlink(url, text) {
-  if (!url) return text;
+  if (!safeUrl(url)) return text;
   return `${ESC}]8;;${url}${ESC}\\${text}${ESC}]8;;${ESC}\\`;
 }
 
@@ -36,6 +36,28 @@ export function visibleLength(s) {
     .length;
 }
 
+/**
+ * Strip anything that could steer the terminal rather than print in it.
+ *
+ * The headline is written by a model, server-side, and lands unescaped on the
+ * row above somebody's prompt. An escape sequence in it would be able to move
+ * the cursor, repaint the screen or hide what it did. Text only.
+ */
+function plainText(s) {
+  return String(s).replace(/[\x00-\x1f\x7f]/g, ' ');
+}
+
+/**
+ * Is this a URL we are willing to hand a terminal as a hyperlink target?
+ *
+ * Same reasoning as above, one step further: the URL goes inside an OSC 8
+ * escape, so a control character in it would terminate the sequence early and
+ * write whatever followed straight to the screen.
+ */
+export function safeUrl(url) {
+  return typeof url === 'string' && /^https?:\/\/[^\s\x00-\x1f\x7f]+$/.test(url);
+}
+
 /** Collapse whitespace and clip to `max`, breaking on a word boundary. */
 function oneLine(s, max) {
   const flat = String(s).replace(/\s+/g, ' ').trim();
@@ -44,6 +66,9 @@ function oneLine(s, max) {
   const space = cut.lastIndexOf(' ');
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
+
+/** The ad line the surface is sold against: at most this many visible chars. */
+export const AD_LINE_MAX = 60;
 
 const LABEL = 'Sponsored';
 const OPEN = '↗';
@@ -63,12 +88,21 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
   // Reserve: the label, its separator, the trailing affordance, and a couple of
   // columns of slack so a status line that is exactly the terminal width does
   // not wrap on terminals that count the last cell differently.
-  const budget = Math.max(20, columns - LABEL.length - OPEN.length - 6);
+  // Two independent ceilings, and the tighter one wins.
+  //
+  //   columns  -- so the line never wraps (a wrapped status line pushes the
+  //               prompt down a row on every redraw and looks broken);
+  //   AD_LINE_MAX -- the format contract the surface is *sold* against. An
+  //               advertiser buys a short line; a wide terminal must not turn
+  //               that into a banner, and it must leave room for whatever the
+  //               user's own chained status line already puts on the row.
+  const fit = Math.max(20, columns - LABEL.length - OPEN.length - 6);
+  const budget = Math.min(AD_LINE_MAX, fit);
 
-  let text = oneLine(ad.headline, budget);
+  let text = oneLine(plainText(ad.headline), budget);
   if (ad.body) {
     const room = budget - text.length - 3;
-    if (room >= 24) text = `${text} — ${oneLine(ad.body, room)}`;
+    if (room >= 24) text = `${text} — ${oneLine(plainText(ad.body), room)}`;
   }
 
   return hyperlink(ad.clickUrl, dim(`${LABEL} · ${text} ${OPEN}`));
@@ -84,13 +118,31 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
  * one row -- so the chained one wins and we stay silent. Taking the user's own
  * status line away to show an ad is not a trade this plugin makes.
  */
-export function composeStatusLine({ ad, chained = '', mode = 'card', columns = 80, color = true }) {
+export function composeStatusLine(opts) {
+  return composeStatusLineParts(opts).text;
+}
+
+/**
+ * The same composition, plus whether the ad was actually drawn.
+ *
+ * The caller bills an impression, and "an ad was parked" is not the same claim
+ * as "an ad reached the screen". In 'line' mode with a chained status line it
+ * did not, and billing for it would charge an advertiser for a row nobody saw.
+ */
+export function composeStatusLineParts({
+  ad,
+  chained = '',
+  mode = 'card',
+  columns = 80,
+  color = true,
+}) {
   const chain = (chained || '').replace(/\s+$/, '');
   if (mode === 'line') {
-    if (chain) return chain.split('\n')[0];
-    return ad ? renderSlotLine(ad, { columns, color }) : '';
+    if (chain) return { text: chain.split('\n')[0], adRendered: false };
+    if (!ad) return { text: '', adRendered: false };
+    return { text: renderSlotLine(ad, { columns, color }), adRendered: true };
   }
-  if (!ad) return chain;
+  if (!ad) return { text: chain, adRendered: false };
   const line = renderSlotLine(ad, { columns, color });
-  return chain ? `${chain}\n${line}` : line;
+  return { text: chain ? `${chain}\n${line}` : line, adRendered: true };
 }

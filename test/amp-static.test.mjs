@@ -70,3 +70,16 @@ test('it does not write to stdout or stderr', () => {
   assert.ok(!/process\.std(out|err)\.write/.test(code));
   assert.ok(/ctx\.ui\.notify/.test(code));
 });
+
+test('it declares which ad surface it is serving', () => {
+  // The backend now has two: the end-of-turn line every host gets, and Claude
+  // Code's status line. Amp has no status line, so this file is TURN_END and
+  // nothing else -- and it has its own inlined copy of the request, so the
+  // field has to be added here separately from hooks/lib/api.mjs.
+  assert.ok(/surface:\s*'TURN_END'/.test(code), "amp/prmpt.ts must send surface: 'TURN_END'");
+  assert.ok(!/STATUS_LINE/.test(code), 'Amp has no status line and must never ask for one');
+});
+
+test('it never sends signalTokens, because it has the real turn text', () => {
+  assert.ok(!/signalTokens/.test(code));
+});

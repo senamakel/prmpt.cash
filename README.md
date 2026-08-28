@@ -8,6 +8,11 @@ in a while it is yes, and you get one clearly-labelled line. **Click it and you 
 paid**, straight to your wallet, usually within a second, in whichever token you
 picked.
 
+In Claude Code there is a second place it can appear: a short segment appended to
+your **status line**, the footer that renders while the model is working. It is
+appended to the status line you already have, never in place of it, and it is
+capped at 60 characters. See [Two places an ad can appear](#two-places-an-ad-can-appear).
+
 You never had to sell anything, watch anything or click anything. Advertisers are
 paying for the moment a real problem is on your screen, and this is your share of it.
 
@@ -167,6 +172,12 @@ Deliberately a different file from the key: config.json is rewritten by every
 code path that touches settings, and it is the file people paste into bug
 reports. The key stays out of both blast radii.
 
+The status-line surface keeps two more files there, neither of them secret:
+`statusline-chain-claude.json`, holding the status-line setting the installer
+displaced so it can be run and later handed back, and `slot.json` plus
+`pending.jsonl`, which are the one decision waiting to be drawn and the list of
+ads that have actually been drawn and not yet reported. All 0600.
+
 The token is never echoed, never logged, and never appears in hook output. It
 travels only in the `Authorization: Bearer` header of the serve request.
 
@@ -207,6 +218,81 @@ Being honest about what that does and does not guarantee:
 - **A git checkout is never touched.** If you are developing the plugin, update
   it with git; the auto-updater refuses outright and does not even check.
 
+## Two places an ad can appear
+
+| Surface | When | Where | Hosts | |
+|---|---|---|---|---|
+| End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp | on by default |
+| Status line | while the model is working | one dim row above your prompt | **Claude Code only** | **opt-in** |
+
+**The status line is opt-in, and stays off until you ask for it.** Claude Code
+hides most of its footer keyboard hints — including `esc to interrupt` — the
+moment *any* custom status line is set. That is Claude Code's behaviour, not
+ours, but it is a real cost, and trading somebody's keybinding hints for an ad
+placement is not a choice an installer gets to make on their behalf. So a
+default install wires the end-of-turn line and nothing else, and says so.
+
+```sh
+$ prmpt statusline install     # also: status, preview, uninstall
+$ curl ... | sh -s -- --statusline    # or ask for it up front
+```
+
+Either route turns on the whole surface: the row itself, and the
+`UserPromptSubmit` hook that fetches something fresher to put in it.
+`prmpt statusline uninstall` removes both, and gives back any status line you
+already had.
+
+**The status line is Claude Code only, on purpose.** Codex and Gemini CLI have no
+equivalent footer, and inventing config for them would wire up something that
+could never display anything. Cursor and Windsurf are absent for the same
+reason they always were. (Codex's `[tui] status_line` accepts identifiers from a
+fixed list of built-in items and cannot run a command — see
+[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
+otherwise unaffected: its `Stop` hook still matches your turns, still prints the
+end-of-turn line, and still parks a slot the editor extension can render.)
+
+### The status line has two fillers
+
+They write the same file, `~/.config/prmpt/slot.json`, and whichever wrote last
+is what you see. They are not the same thing, and the difference is what you are
+charged in privacy for:
+
+- **The parked ad.** When a turn ends and matches, that decision is *already*
+  served and already paid for. It is parked, and the status line keeps showing
+  it while you read the answer and type the next prompt, until it ages out after
+  30 minutes. **This sends nothing new** — the request already happened — and it
+  earns you nothing new either: it is the same impression, still on screen.
+- **The prompt-fetched ad.** When you press enter, a detached child asks for a
+  decision matched to *this* prompt and parks that instead. It is fresher, it is
+  its own impression on its own surface, and it is billed once — the first time
+  it is actually drawn. This is the path that sends keywords derived from your
+  prompt; see [What is sent](#what-is-sent), which does not soften it.
+
+A fetch that misses, or does not come back in time, writes nothing at all, so
+the parked ad is still there and the row does not go blank.
+
+**It wraps the status line you already have.** If `statusLine` in
+`~/.claude/settings.json` already points at a command, the installer records it
+and ours runs it, keeps its output above ours, and puts our row closest to the
+prompt. Your command is handed the same JSON on stdin that Claude Code would
+have given it. On a host that renders only one row, yours wins and nothing of
+ours is drawn. `--uninstall`, and `prmpt statusline uninstall`, give your
+original command back exactly as it was.
+
+Three more things worth knowing:
+
+- The renderer **makes no network call, ever.** Claude Code re-runs a status-line
+  command continuously and watches it for slowness. Both fillers write a small
+  file from somewhere else; the renderer reads that file and prints one row.
+- **Claude Code hides most of its footer key hints while a custom status line is
+  set** — including `esc to interrupt`. That is Claude Code's behaviour, not
+  ours. Removing the status line brings them back.
+- The `/plugin install` route wires the end-of-turn hook and **nothing else**.
+  `statusLine` is a settings key rather than a hook, and a Claude Code plugin can
+  only declare hooks, so there would be nowhere to draw the row — which is also
+  why that route does not carry the `UserPromptSubmit` fetch hook. Use
+  `prmpt statusline install` to add the surface.
+
 ## What it looks like
 
 ```
@@ -215,43 +301,23 @@ Quarantine detects flaky tests from your CI history and isolates them
 https://prmpt.cash/7q
 ```
 
-The headline is rewritten for *your* reply, not boilerplate. The link is our own
+and, in the status line, one dim row directly above your prompt, beneath
+whatever status line you already had:
+
+```
+my-repo (main) Opus | 41% left
+Sponsored · Quarantine flaky tests — detects flakes from CI history ↗
+```
+
+The click URL is attached as a terminal hyperlink rather than printed, so the
+row stays short; it is clickable in iTerm2, Kitty and WezTerm and is plain text
+everywhere else.
+
+The headline is rewritten for *your* turn, not boilerplate. The link is our own
 redirect: it records the click, pays you in your chosen token, and 302s to the
 advertiser. Every payout is a real on-chain transaction, listed with its
 signature at <https://prmpt.cash/earnings> and counted on the public
 [analytics page](https://prmpt.cash/analytics).
-
-## The status line (opt-in)
-
-By default the ad appears once, at the end of a turn, and scrolls away with
-everything else. `prmpt statusline install` also renders it on Claude Code's
-status line — one dim, clickable row directly above your prompt — until it ages
-out after 30 minutes.
-
-```
-$ prmpt statusline install
-$ prmpt statusline status
-$ prmpt statusline uninstall
-```
-
-Three things worth knowing before you turn it on:
-
-- **It never makes a request.** The end-of-turn hook already matched an ad for
-  your turn; it parks that decision in `~/.config/prmpt/slot.json` and the status
-  line only reads it. A status line re-renders constantly, so fetching from it
-  would hammer the backend and put a network round trip inside a redraw.
-- **Claude Code hides its footer key hints while a custom status line is set** —
-  including `esc to interrupt`. That is Claude Code's behaviour, not ours, and it
-  is why this is opt-in rather than part of the install. Uninstalling brings them
-  back.
-- **A status line you already had keeps working.** Yours is stashed, run, and
-  rendered above ours; `uninstall` puts it back exactly as it was.
-
-**Codex has no equivalent.** Its `[tui] status_line` accepts identifiers from a
-fixed list of built-in items and cannot run a command — see
-[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
-otherwise unaffected: its `Stop` hook still matches your turns and still prints
-the end-of-turn line.
 
 ## It cannot break your session
 
@@ -266,6 +332,13 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
   about as long as an exit.
 - **Neither is updating.** The daily update check costs the turn a `stat()` and
   a `spawn()`. The download happens in a detached child, or not at all.
+- **`UserPromptSubmit` blocks you** — when you have opted into the status line;
+  it is not wired otherwise — so it does no network work at all: it
+  derives keywords, hands them to a detached child and exits. Measured at well
+  under a tenth of a second.
+- **The status-line command never touches the network.** It reads one small file
+  and prints one line. If your own status-line command is slow, it is given a
+  two-second budget and then whatever it produced is used.
 - Nothing is installed but the plugin itself. No dependencies to audit.
 
 Turn it off without uninstalling:
@@ -276,12 +349,44 @@ export PRMPT_DISABLED=1
 
 ## What is sent
 
-The agent's **final message for that turn**, plus a session id, an install id
-derived from your machine, and the agent name. That is what the match runs
-against.
+**At the end of a turn:** the agent's **final message for that turn**, plus a
+session id, an install id derived from your machine, and the agent name. That is
+what the match runs against.
 
-Not sent: your prompts, your code, your file contents, your repo name, your IP
-(the server derives a coarse country at request time and discards the address).
+**For the parked ad on the status line: nothing at all.** It is the decision the
+end-of-turn request already returned, re-displayed from a local file. No second
+request is made and no new data leaves the machine.
+
+**For the prompt-fetched ad on the status line** — which exists only if you
+turned the status line on, and does not exist on a default install: there is no
+reply yet — the ad renders while the model is still working — so the match runs
+against a handful of keywords derived from your prompt **on your machine**, by
+[`hooks/lib/tokens.mjs`](hooks/lib/tokens.mjs). What is transmitted is that list
+and nothing else.
+
+Read that file if this matters to you; it is forty lines. Before anything is
+split into words it removes, whole: fenced code blocks, inline code spans, URLs,
+filesystem paths (POSIX and Windows) and email addresses. What is left is
+lowercased, stripped of stopwords, de-duplicated, filtered of anything that
+looks like a hash or a credential, capped at 32 words — and **sorted
+alphabetically**, so word order, the last thing that makes a set of words into
+prose, is gone before the request is built. `fix the nightingale acquisition
+timeout` leaves as `["acquisition", "fix", "nightingale", "timeout"]`.
+
+**Not sent: your prompts**, your code, your file contents, your repo name, your
+IP (the server derives a coarse country at request time and discards the
+address). The status-line surface sends derived keywords; it does not send the
+text you typed, and there is a test that asserts a phrase from the prompt is
+nowhere in the request body.
+
+That is a real reduction, not anonymity: individual words you typed do leave the
+machine. It is also why the status line is opt-in: on a default install this
+path does not run at all, and nothing beyond the end-of-turn message is ever
+sent. If you turned it on and it is not a trade you want, `prmpt statusline
+uninstall` removes the surface, or removing just the `UserPromptSubmit` entry
+from `~/.claude/settings.json` turns off only the prompt-fetched path, leaving
+the end-of-turn line — and the parked ad on the status line, which sends
+nothing — working. `PRMPT_DISABLED=1` turns everything off.
 
 See [`.env.example`](.env.example) for every knob.
 
@@ -290,6 +395,8 @@ See [`.env.example`](.env.example) for every knob.
 | Agent | Event | Config |
 |---|---|---|
 | Claude Code | `Stop` | `~/.claude/settings.json`, timeout in **seconds** |
+| Claude Code | `UserPromptSubmit` | same file — fetches the status-line slot. **Opt-in** |
+| Claude Code | `statusLine` | same file — renders it. Wraps an existing command. **Opt-in** |
 | Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
 | Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
 | Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |

@@ -269,12 +269,28 @@ export function entriesFor(config, event) {
   return groups.flatMap((g) => (Array.isArray(g.hooks) ? g.hooks.map((h) => ({ ...h, matcher: g.matcher })) : []));
 }
 
-/** Only our own entries — the ones whose command runs turn-end.mjs. */
+/**
+ * Every hook script this plugin installs.
+ *
+ * Duplicated from install.sh on purpose, like the table below: a test that
+ * imported the list under test would agree with any bug in it.
+ */
+export const OUR_HOOKS = ['turn-end.mjs', 'prompt-start.mjs'];
+
+/** Only our own entries — the ones whose command runs one of our scripts. */
 export function ourEntries(config, event) {
   return entriesFor(config, event).filter(
-    (h) => typeof h.command === 'string' && h.command.includes('turn-end.mjs'),
+    (h) => typeof h.command === 'string' && OUR_HOOKS.some((n) => h.command.includes(n)),
   );
 }
+
+/**
+ * Where the plugin records the status-line setting it displaced.
+ *
+ * One file for both wiring routes -- install.sh and `prmpt statusline install`
+ * -- so an install done one way can be undone the other.
+ */
+export const STATUSLINE_STATE = ['.config', 'prmpt', 'statusline-chain-claude.json'];
 
 /**
  * Where each supported host keeps its config, which event it fires, and what
@@ -285,6 +301,16 @@ export function ourEntries(config, event) {
  * seconds, and swapping them yields a hook that is either useless or a 5000
  * second stall. The table is duplicated from install.sh on purpose — a test
  * that imported the value under test would agree with any bug.
+ *
+ * `event`/`timeout`/`matcher` describe the end-of-turn surface, which every
+ * host has and which a default install wires up.
+ *
+ * `statusLineEvents` and `statusLine` describe the OPT-IN status-line surface,
+ * which only Claude Code has: nothing else here has a footer that renders
+ * while the model is working, so fabricating one for them would wire up a hook
+ * that could never display anything. Neither is written unless --statusline is
+ * passed -- Claude Code hides most of its footer key hints while any custom
+ * status line is set, and that is not a trade an installer makes for somebody.
  */
 export const HOSTS = [
   {
@@ -295,6 +321,11 @@ export const HOSTS = [
     event: 'Stop',
     timeout: 5,
     matcher: undefined,
+    hook: 'turn-end.mjs',
+    statusLineEvents: [
+      { event: 'UserPromptSubmit', timeout: 5, matcher: undefined, hook: 'prompt-start.mjs' },
+    ],
+    statusLine: 'statusline.mjs',
   },
   {
     agent: 'codex',
@@ -304,6 +335,9 @@ export const HOSTS = [
     event: 'Stop',
     timeout: 5,
     matcher: undefined,
+    hook: 'turn-end.mjs',
+    statusLineEvents: [],
+    statusLine: null,
   },
   {
     agent: 'gemini',
@@ -313,6 +347,9 @@ export const HOSTS = [
     event: 'AfterAgent',
     timeout: 5000,
     matcher: '*',
+    hook: 'turn-end.mjs',
+    statusLineEvents: [],
+    statusLine: null,
   },
 ];
 

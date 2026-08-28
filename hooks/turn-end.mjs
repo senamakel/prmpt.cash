@@ -17,9 +17,10 @@ import process from 'node:process';
 import { loadConfig, detectRepo } from './lib/config.mjs';
 import { serveAd } from './lib/api.mjs';
 import { enrolInBackground } from './lib/enrol.mjs';
+import { flushImpressionsInBackground } from './lib/background.mjs';
 import { linkEvmInBackground } from './lib/link-evm.mjs';
 import { autoUpdateInBackground } from './lib/autoupdate.mjs';
-import { writeSlot } from './lib/slot.mjs';
+import { FILLER_TURN_END, writeSlot } from './lib/slot.mjs';
 
 /** Below this many characters a turn carries no usable signal. */
 const MIN_TURN_CHARS = 80;
@@ -267,6 +268,14 @@ function main() {
     // the address is linked a turn later than it might have been.
     linkEvmInBackground(config);
 
+    // Tell the backend about anything the Claude Code status line has drawn but
+    // not yet reported. Deliberately BEFORE the turn-text checks below: most
+    // turns are too short to serve, and an impression that is owed to the user
+    // must not wait for one that happens to match. Gated on the pending log
+    // being non-empty, so the turns that have nothing to report -- almost all
+    // of them -- pay a stat() and nothing else.
+    flushImpressionsInBackground();
+
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.
     let turnText = '';
@@ -302,6 +311,9 @@ function main() {
     const ad = await serveAd(config, {
       installId: config.installId,
       sessionId: config.sessionId,
+      // Which of the two places an ad can appear this is. The other one is the
+      // Claude Code status line, which renders mid-turn and has no turn text.
+      surface: 'TURN_END',
       turnText,
       repoLanguage,
       fileTypes,
@@ -315,7 +327,10 @@ function main() {
     // reads this turn and types the next prompt. Best effort and non-blocking
     // on failure: a status line that shows nothing is a missed impression, and
     // a turn that breaks over a failed write is a bug.
-    writeSlot(ad, { sessionId: config.sessionId, harness });
+    //
+    // Tagged as the turn-end filler, which is what stops it being billed a
+    // second time: this ad was served and billed by the request three lines up.
+    writeSlot(ad, { sessionId: config.sessionId, harness, filler: FILLER_TURN_END });
 
     const lines = renderLines(ad);
 

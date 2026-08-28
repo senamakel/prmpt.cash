@@ -38,8 +38,22 @@ import path from 'node:path';
 import { configDir } from './config.mjs';
 import { pluginRoot } from './version.mjs';
 
-/** Recognises our own command so a re-install doesn't chain itself. */
-const MARKER = 'prmpt';
+/**
+ * Recognises our own command so a re-install doesn't chain itself.
+ *
+ * Anchored on the directory as well as the file name, and duplicated verbatim
+ * in the merge programs install.sh and install.ps1 embed -- both routes write
+ * this setting and either may find the other's work. A bare 'statusline.mjs'
+ * also matches somebody's own their-statusline.mjs, and mistaking theirs for
+ * ours means either deleting it on uninstall or forking a fresh copy of the
+ * renderer on every single render.
+ */
+const MARKER = /hooks[\/\\]statusline\.mjs/;
+
+/** Is this status-line command one of ours? */
+export function isOurCommand(command) {
+  return typeof command === 'string' && MARKER.test(command);
+}
 
 /**
  * What installing costs the user, printed before anything is written.
@@ -82,20 +96,92 @@ function writeJson(file, value, mode = 0o600) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode });
 }
 
+/** Every host that has ever had a chain file, most likely first. */
+const CHAIN_HOSTS = ['claude', 'codex'];
+
 /**
  * The chained status line, if the renderer should run one.
  *
  * Keyed by host so that a machine running more than one agent keeps them
  * separate. Only Claude Code can install today, but the renderer is written
  * against the general case.
+ *
+ * The fallback across hosts is load-bearing rather than tidy-minded: the host
+ * is guessed from CLAUDECODE, and only one of these files is ever written on a
+ * machine, so taking whichever exists cannot pick the wrong one.
+ *
+ * UNVERIFIED ASSUMPTION, and a judgement call rather than a fact: CLAUDECODE=1
+ * is documented for HOOKS, and nothing says it is set for the status-line
+ * command as well. It was not confirmed against a running Claude Code. If it
+ * turns out not to be set, the guess here is wrong every time -- which without
+ * the fallback would mean silently never running a status line somebody built,
+ * the one failure in this file that costs a user something they made. If you
+ * confirm the behaviour either way, say so here and simplify accordingly.
  */
 export function readChain(host = process.env.CLAUDECODE === '1' ? 'claude' : 'codex') {
-  return readJson(chainPath(host));
+  for (const candidate of [host, ...CHAIN_HOSTS]) {
+    const found = readJson(chainPath(candidate));
+    if (found) return found;
+  }
+  return null;
 }
 
 /** The command Claude Code should run, quoted for a path with spaces in it. */
 export function renderCommand() {
   return `node "${path.join(pluginRoot(), 'hooks', 'statusline.mjs')}"`;
+}
+
+/**
+ * The UserPromptSubmit hook that fetches something fresher for the row.
+ *
+ * Part of THIS surface, not of the default install: it exists only to fill the
+ * status-line slot, so wiring it without a status line would send keywords
+ * derived from somebody's prompt for an ad that had nowhere to appear.
+ * install.sh --statusline writes the same pair.
+ */
+export function fetchCommand() {
+  return `node "${path.join(pluginRoot(), 'hooks', 'prompt-start.mjs')}"`;
+}
+
+/** Recognises the fetch hook, ours or a previous version of ours. */
+function isOurFetchHook(entry) {
+  return typeof entry?.command === 'string' && /prompt-start\.mjs/.test(entry.command);
+}
+
+/**
+ * Add our UserPromptSubmit entry, replacing any earlier copy of it.
+ *
+ * Filtering first is what stops a re-install stacking duplicates: the settings
+ * file is the user's and we are one entry in a list that may hold several.
+ */
+function addFetchHook(settings) {
+  const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
+  const groups = Array.isArray(hooks.UserPromptSubmit) ? hooks.UserPromptSubmit : [];
+  const kept = [];
+  for (const group of groups) {
+    if (!Array.isArray(group?.hooks)) { kept.push(group); continue; }
+    const remaining = group.hooks.filter((h) => !isOurFetchHook(h));
+    if (remaining.length) kept.push({ ...group, hooks: remaining });
+  }
+  // Timeout in SECONDS. Claude Code and Gemini CLI differ on the unit and the
+  // two are not interchangeable.
+  kept.push({ hooks: [{ type: 'command', command: fetchCommand(), timeout: 5 }] });
+  settings.hooks = { ...hooks, UserPromptSubmit: kept };
+}
+
+/** Take our UserPromptSubmit entry back out, leaving everybody else's. */
+function removeFetchHook(settings) {
+  const groups = settings.hooks?.UserPromptSubmit;
+  if (!Array.isArray(groups)) return;
+  const kept = [];
+  for (const group of groups) {
+    if (!Array.isArray(group?.hooks)) { kept.push(group); continue; }
+    const remaining = group.hooks.filter((h) => !isOurFetchHook(h));
+    if (remaining.length) kept.push({ ...group, hooks: remaining });
+  }
+  if (kept.length) settings.hooks.UserPromptSubmit = kept;
+  else delete settings.hooks.UserPromptSubmit;
+  if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
 }
 
 // --- Claude Code ------------------------------------------------------------
@@ -108,7 +194,7 @@ export function claudeStatus() {
     path: claudeSettingsPath(),
     supported: true,
     present: fs.existsSync(claudeSettingsPath()),
-    installed: typeof command === 'string' && command.includes(MARKER),
+    installed: isOurCommand(command),
     chained: readJson(chainPath('claude')) !== null,
   };
 }
@@ -124,8 +210,7 @@ export function installClaude() {
   if (!fs.existsSync(backup)) writeJson(backup, settings);
 
   const existing = settings.statusLine;
-  const isOurs =
-    existing && typeof existing.command === 'string' && existing.command.includes(MARKER);
+  const isOurs = Boolean(existing) && isOurCommand(existing.command);
   if (existing && !isOurs) {
     writeJson(chainPath('claude'), existing);
   } else if (!existing) {
@@ -142,6 +227,9 @@ export function installClaude() {
     padding: 0,
   };
 
+  // The surface is both halves, so both go in together.
+  addFetchHook(settings);
+
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
   return { path: file, chained: existing && !isOurs ? existing : null };
@@ -153,7 +241,7 @@ export function uninstallClaude() {
   if (!settings) return { path: file, changed: false };
 
   const command = settings.statusLine?.command;
-  if (typeof command === 'string' && !command.includes(MARKER)) {
+  if (typeof command === 'string' && !isOurCommand(command)) {
     // Someone else's status line is in place now. Leave it entirely alone.
     return { path: file, changed: false };
   }
@@ -161,6 +249,11 @@ export function uninstallClaude() {
   const chain = readJson(chainPath('claude'));
   if (chain) settings.statusLine = chain;
   else delete settings.statusLine;
+
+  // Both halves came in together and both go out together. Leaving the fetch
+  // hook behind would keep sending prompt keywords for a row that no longer
+  // exists -- the exact trade the user just opted out of.
+  removeFetchHook(settings);
 
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
   try { fs.rmSync(chainPath('claude'), { force: true }); } catch { /* ignore */ }

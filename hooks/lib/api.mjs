@@ -15,6 +15,17 @@ const SERVE_AD = `mutation ServeAd($input: TurnContextInput!) {
   }
 }`;
 
+// The status-line surface bills on RENDER, not on the serve.
+//
+// A decision fetched at the start of a turn may never be shown -- the turn can
+// end before the status line repaints, or the user can have the slot expire
+// under them -- so the serve alone is not an impression. The renderer records
+// what it actually drew and this mutation reports the batch, always from a
+// detached child and never from the render path.
+const CONFIRM_IMPRESSIONS = `mutation ConfirmImpressions($requestIds: [ID!]!) {
+  confirmImpressions(requestIds: $requestIds)
+}`;
+
 // Sign-In With Solana, the two halves of one round trip.
 //
 // The signature must cover the server's `message` BYTE FOR BYTE. Rebuilding
@@ -174,6 +185,31 @@ export async function serveAd(config, input) {
     };
   } catch {
     // Timeout, connection refused, bad JSON, GraphQL error, anything: no ad.
+    return null;
+  }
+}
+
+/**
+ * Report the impressions that have actually been rendered.
+ *
+ * Resolves to the number the backend accepted, or null on any failure at all --
+ * the caller keeps the ids and retries on a later turn, so a flush that fails
+ * costs nothing but a delay. Never rejects: this runs in a detached child with
+ * nowhere to report to.
+ */
+export async function confirmImpressions(config, requestIds) {
+  if (!Array.isArray(requestIds) || requestIds.length === 0) return 0;
+  try {
+    const data = await graphql({
+      endpoint: config.endpoint,
+      token: config.token,
+      query: CONFIRM_IMPRESSIONS,
+      variables: { requestIds },
+      timeoutMs: config.timeoutMs,
+    });
+    const n = data?.confirmImpressions;
+    return typeof n === 'number' ? n : null;
+  } catch {
     return null;
   }
 }

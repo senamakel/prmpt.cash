@@ -87,7 +87,8 @@ jobs:
           [ -d .claude-plugin ] && cp -R .claude-plugin "$STAGE/" || true
 
           # Refuse to ship an archive that could not possibly work.
-          for required in hooks/turn-end.mjs hooks/lib/config.mjs bin/prmpt.mjs package.json; do
+          for required in hooks/turn-end.mjs hooks/prompt-start.mjs hooks/statusline.mjs \
+                          hooks/slot-fetch.mjs hooks/lib/config.mjs bin/prmpt.mjs package.json; do
             test -f "$STAGE/$required" || { echo "::error::missing $required"; exit 1; }
           done
 

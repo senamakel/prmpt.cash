@@ -33,6 +33,7 @@ param(
   [string] $Endpoint = $env:PRMPT_ENDPOINT,
   [string] $Dir      = $env:PRMPT_DIR,
   [switch] $Project,
+  [switch] $StatusLine,
   [switch] $Uninstall
 )
 
@@ -51,6 +52,10 @@ $DefaultEndpoint = 'https://api.prmpt.cash/graphql'
 
 if (-not $Endpoint) { $Endpoint = $DefaultEndpoint }
 if (-not $Dir) { $Dir = Join-Path $env:LOCALAPPDATA 'prmpt' }
+
+# Where the status line the user already had is recorded, so our renderer can
+# run it and uninstall can hand it back. Deliberately not config.json, which is
+# rewritten by every code path that touches settings.
 
 function Write-Ok   { param($m) Write-Host "  + $m" -ForegroundColor Green }
 function Write-Skip { param($m) Write-Host "  - $m" -ForegroundColor DarkGray }
@@ -76,6 +81,7 @@ $NodeBin = $node.Source
 # under the user profile as the POSIX hosts do.
 $Home_ = $env:USERPROFILE
 if (-not $Home_) { $Home_ = $HOME }
+$StateFile = Join-Path $Home_ '.config\prmpt\statusline-chain-claude.json'
 if ($Project) {
   $ClaudeCfg = '.\.claude\settings.json'
   $CodexCfg  = '.\.codex\hooks.json'
@@ -102,15 +108,23 @@ if (raw) {
   try { j=JSON.parse(raw); }
   catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
 }
-// Back up before the first modification, never after.
-if (raw) fs.copyFileSync(p, p+".bak");
+// Back up before the FIRST modification, never after. Claude Code takes
+// three passes over one file -- two hooks and the status line -- and a
+// backup per pass would leave a .bak of our own half-finished work rather
+// than of what the user actually had. PRMPT_BACKUP=0 says somebody already
+// took it this run; unset means take it, so a standalone run still does.
+if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
 
 j.hooks = j.hooks || {};
 const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
 // Drop any previous entry of ours so re-running cannot stack duplicates.
+// Keyed on the script being installed rather than on one hard-coded name:
+// there are two hooks now, on two different events, and a filter naming
+// only the first would stack a duplicate of the second on every run.
+const name = hook.split(/[\\/]/).pop();
 for (const g of groups) {
   if (Array.isArray(g.hooks)) {
-    g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
+    g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes(name)));
   }
 }
 // Quoted, because the install dir routinely contains a space: macOS puts
@@ -124,7 +138,8 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 $CleanJs = @'
-const fs=require("fs"), p=process.env.PRMPT_CFG;
+const fs=require("fs"), p=process.env.PRMPT_CFG, state=process.env.PRMPT_STATE;
+const OURS=["turn-end.mjs","prompt-start.mjs"];
 let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
 let hit=false;
 for (const ev of Object.keys(j.hooks||{})) {
@@ -133,15 +148,62 @@ for (const ev of Object.keys(j.hooks||{})) {
   for (const g of groups) {
     if (!Array.isArray(g.hooks)) continue;
     const before=g.hooks.length;
-    g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && h.command.includes("turn-end.mjs")));
+    g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && OURS.some(n=>h.command.includes(n))));
     if (g.hooks.length!==before) hit=true;
   }
   j.hooks[ev]=groups.filter(g=>Array.isArray(g.hooks) ? g.hooks.length>0 : true);
   if (j.hooks[ev].length===0) delete j.hooks[ev];
 }
 if (j.hooks && Object.keys(j.hooks).length===0) delete j.hooks;
+// Give the status line back. Whatever was there before we arrived was
+// recorded at install time; without this the user is left with a footer
+// that runs a script we just deleted.
+// Ours, told apart from anybody else by the DIRECTORY as well as the
+// name. A bare "statusline.mjs" also matches a their-statusline.mjs that
+// somebody wrote themselves, and mistaking theirs for ours means either
+// deleting it or forking a copy of the renderer on every render.
+const MINE=/hooks[\/\\]statusline\.mjs/;
+const sl=j.statusLine;
+if (sl && typeof sl.command==="string" && MINE.test(sl.command)) {
+  // Their whole setting goes back, not just the command: padding and any
+  // other key they set were theirs, and restoring the command into OUR
+  // object would hand them a merge of the two.
+  let chain=null;
+  try { const c=JSON.parse(fs.readFileSync(state,"utf8")); if (c && typeof c==="object") chain=c; } catch {}
+  if (chain) j.statusLine=chain; else delete j.statusLine;
+  try { fs.rmSync(state,{force:true}); } catch {}
+  hit=true;
+}
 if (!hit) process.exit(2);
 fs.copyFileSync(p, p+".bak");
+fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+'@
+
+$StatusJs = @'
+const fs=require("fs"), path=require("path");
+const p=process.env.PRMPT_CFG, hook=process.env.PRMPT_HOOK, state=process.env.PRMPT_STATE;
+let j={};
+const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
+if (raw) {
+  try { j=JSON.parse(raw); }
+  catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
+}
+if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
+const prev = (j.statusLine && typeof j.statusLine === "object") ? j.statusLine : {};
+const prevCmd = typeof prev.command === "string" ? prev.command : "";
+// Record theirs so our renderer can run it and uninstall can hand it back.
+// Never record OUR OWN command: a re-install would otherwise make every
+// render fork a fresh copy of the renderer, forever.
+// Ours, told apart from anybody else by the DIRECTORY as well as the
+// name -- see the uninstall program above.
+if (prevCmd && !/hooks[\/\\]statusline\.mjs/.test(prevCmd)) {
+  fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
+  fs.writeFileSync(state, JSON.stringify(prev, null, 2)+"\n", { mode:0o600 });
+  fs.chmodSync(state, 0o600);
+}
+// Their other statusLine keys (padding and friends) are display preferences
+// and are kept; only the command becomes ours.
+j.statusLine = { ...prev, type:"command", command:`node ${JSON.stringify(hook)}` };
 fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
@@ -177,6 +239,7 @@ if ($Uninstall) {
   foreach ($f in @($ClaudeCfg, $CodexCfg, $GeminiCfg)) {
     if (Test-Path $f) {
       $env:PRMPT_CFG = $f
+      $env:PRMPT_STATE = $StateFile
       if ((Invoke-NodeScript -Script $CleanJs) -eq 0) {
         Write-Ok "cleaned $f (backup: $f.bak)"
       }
@@ -304,6 +367,10 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
 
 $Hook = Join-Path $Dir 'hooks\turn-end.mjs'
 if (-not (Test-Path $Hook)) { Die "the hook is missing at $Hook -- the install did not complete." }
+# The status-line surface: one hook to fetch a decision when the user presses
+# enter, and one command to render it in the footer while the model works.
+$PromptHook = Join-Path $Dir 'hooks\prompt-start.mjs'
+$StatusHook = Join-Path $Dir 'hooks\statusline.mjs'
 
 # ------------------------------------------------------------------------ link
 Write-Host ''
@@ -335,6 +402,10 @@ if (Test-Path $cfgFile) {
 #   Codex        Stop        timeout SECONDS
 #   Gemini CLI   AfterAgent  timeout MILLISECONDS, and wants a matcher
 #   Amp          agent.end   a TypeScript plugin, not a hook at all
+#
+# Claude Code can have two more, because it is the only host with a status line:
+# UserPromptSubmit to fetch, and the statusLine setting to render. Both are
+# OPT-IN behind -StatusLine, and gated together -- see install.sh for why.
 Write-Host ''
 $scope = if ($Project) { 'project' } else { 'user' }
 Write-Host "Wiring up agents ($scope scope)" -ForegroundColor White
@@ -370,10 +441,38 @@ foreach ($t in $targets) {
   $env:PRMPT_TIMEOUT = "$($t.Timeout)"
   $env:PRMPT_MATCHER = $t.Matcher
   $env:PRMPT_HOOK    = $Hook
+  $env:PRMPT_BACKUP  = '1'
   $rc = Invoke-NodeScript -Script $MergeJs
   if ($rc -eq 0) {
     Write-Ok "$($t.Label)  $($t.Cfg)  ($($t.Event))"
     $configured++
+
+    # Claude Code only, and only when asked for. Two further passes over the
+    # SAME file, so neither takes a backup: the one above already captured what
+    # the user actually had, and a second would overwrite it with our own
+    # half-finished work.
+    if ($t.Name -eq 'claude' -and $StatusLine) {
+      $env:PRMPT_EVENT   = 'UserPromptSubmit'
+      $env:PRMPT_TIMEOUT = '5'
+      $env:PRMPT_MATCHER = ''
+      $env:PRMPT_HOOK    = $PromptHook
+      $env:PRMPT_BACKUP  = '0'
+      if ((Invoke-NodeScript -Script $MergeJs) -eq 0) {
+        Write-Ok "             + UserPromptSubmit (fetches the status-line slot)"
+      }
+
+      $env:PRMPT_CFG    = $t.Cfg
+      $env:PRMPT_HOOK   = $StatusHook
+      $env:PRMPT_STATE  = $StateFile
+      $env:PRMPT_BACKUP = '0'
+      if ((Invoke-NodeScript -Script $StatusJs) -eq 0) {
+        if (Test-Path $StateFile) {
+          Write-Ok "             + statusLine (wrapping the one you already had)"
+        } else {
+          Write-Ok "             + statusLine"
+        }
+      }
+    }
   }
 }
 
@@ -413,5 +512,18 @@ Write-Host "  Finish setup: node $Cli onboard"
 Write-Host '                Connect a GitHub or X account to lift the daily earnings'
 Write-Host '                cap, and pick which token you are paid in.'
 Write-Host ''
+if (-not $StatusLine) {
+  # Mirrors install.sh: the trade-off is the reason this is off, and somebody
+  # deciding to turn it on deserves to know the cost before they do.
+  Write-Host '  Not installed: the status line. The same ad can also sit on the row'
+  Write-Host '  above your prompt while the model works, refreshed from the prompt you'
+  Write-Host '  just typed. It is off because Claude Code hides most of its footer key'
+  Write-Host '  hints -- including "esc to interrupt" -- whenever a custom status line'
+  Write-Host '  is set. That is Claude Code behaviour, not something prmpt chooses.'
+  Write-Host ''
+  Write-Host "  Turn it on:   node $Cli statusline install"
+  Write-Host "                (or re-run this installer with -StatusLine)"
+  Write-Host ''
+}
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"

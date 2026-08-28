@@ -58,6 +58,10 @@ ${B}prmpt.cash installer${R}
   --project            Configure ./ (this project) instead of your home directory
   --editor             Also install the VS Code / Cursor extension, if one of
                        them is on your PATH (--no-editor to skip the offer)
+  --statusline         Also show the ad on Claude Code's status line, above your
+                       prompt. OPT-IN: Claude Code hides most of its footer key
+                       hints -- including "esc to interrupt" -- whenever a custom
+                       status line is set, so this is never wired up for you
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
@@ -88,6 +92,8 @@ while [ $# -gt 0 ]; do
     --agents=*)  AGENTS="${1#*=}"; shift ;;
     --editor)    EDITOR_EXT=1; shift ;;
     --no-editor) EDITOR_EXT=0; shift ;;
+    --statusline) STATUSLINE=1; shift ;;
+    --no-statusline) STATUSLINE=0; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
@@ -112,6 +118,17 @@ if [ -z "$INSTALL_DIR" ]; then
   INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"
 fi
 
+# Where the status line the user already had is recorded, so it can be run by
+# ours and handed back on uninstall. Deliberately NOT config.json: that file is
+# rewritten by every code path that touches settings, and losing somebody's
+# footer to an unrelated write would be a poor trade.
+#
+# The same file, in the same shape, as the one hooks/lib/statusline-install.mjs
+# writes for 'prmpt statusline install'. There are two ways to wire this surface
+# up and one renderer reading the result, so a second format would mean an
+# install done one way could not be undone the other.
+STATE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/prmpt/statusline-chain-claude.json"
+
 # --------------------------------------------------------------- prerequisites
 command -v node >/dev/null 2>&1 || die "Node.js 18+ is required and was not found on PATH."
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
@@ -127,8 +144,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
   for f in "$HOME/.claude/settings.json" "$HOME/.codex/hooks.json" "$HOME/.gemini/settings.json" \
            "./.claude/settings.json" "./.codex/hooks.json" "./.gemini/settings.json"; do
     [ -f "$f" ] || continue
-    if PRMPT_CFG="$f" "$NODE_BIN" -e '
-      const fs=require("fs"), p=process.env.PRMPT_CFG;
+    if PRMPT_CFG="$f" PRMPT_STATE="$STATE_FILE" "$NODE_BIN" -e '
+      const fs=require("fs"), p=process.env.PRMPT_CFG, state=process.env.PRMPT_STATE;
+      const OURS=["turn-end.mjs","prompt-start.mjs"];
       let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
       let hit=false;
       for (const ev of Object.keys(j.hooks||{})) {
@@ -137,13 +155,32 @@ if [ "$UNINSTALL" -eq 1 ]; then
         for (const g of groups) {
           if (!Array.isArray(g.hooks)) continue;
           const before=g.hooks.length;
-          g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && h.command.includes("turn-end.mjs")));
+          g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && OURS.some(n=>h.command.includes(n))));
           if (g.hooks.length!==before) hit=true;
         }
         j.hooks[ev]=groups.filter(g=>Array.isArray(g.hooks) ? g.hooks.length>0 : true);
         if (j.hooks[ev].length===0) delete j.hooks[ev];
       }
       if (j.hooks && Object.keys(j.hooks).length===0) delete j.hooks;
+      // Give the status line back. Whatever was there before we arrived was
+      // recorded at install time; without this the user is left with a footer
+      // that runs a script we just deleted.
+      // Ours, told apart from anybody else by the DIRECTORY as well as the
+      // name. A bare "statusline.mjs" also matches a their-statusline.mjs that
+      // somebody wrote themselves, and mistaking theirs for ours means either
+      // deleting it or forking a copy of the renderer on every render.
+      const MINE=/hooks[\/\\]statusline\.mjs/;
+      const sl=j.statusLine;
+      if (sl && typeof sl.command==="string" && MINE.test(sl.command)) {
+        // Their whole setting goes back, not just the command: padding and any
+        // other key they set were theirs, and restoring the command into OUR
+        // object would hand them a merge of the two.
+        let chain=null;
+        try { const c=JSON.parse(fs.readFileSync(state,"utf8")); if (c && typeof c==="object") chain=c; } catch {}
+        if (chain) j.statusLine=chain; else delete j.statusLine;
+        try { fs.rmSync(state,{force:true}); } catch {}
+        hit=true;
+      }
       if (!hit) process.exit(2);
       fs.copyFileSync(p, p+".bak");
       fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
@@ -287,6 +324,10 @@ fi
 
 HOOK="$HOOK_DIR/hooks/turn-end.mjs"
 [ -f "$HOOK" ] || die "the hook is missing at $HOOK -- the install did not complete."
+# The status-line surface: one hook to fetch a decision when the user presses
+# enter, and one command to render it in the footer while the model works.
+PROMPT_HOOK="$HOOK_DIR/hooks/prompt-start.mjs"
+STATUS_HOOK="$HOOK_DIR/hooks/statusline.mjs"
 
 # ------------------------------------------------------------------------ link
 CLI="$INSTALL_DIR/bin/prmpt.mjs"
@@ -320,8 +361,13 @@ fi
 #   Codex        Stop        ~/.codex/hooks.json        timeout SECONDS
 #   Gemini CLI   AfterAgent  ~/.gemini/settings.json    timeout MILLISECONDS
 #   Amp          agent.end   a TypeScript plugin file, not a hook at all
+#
+# Claude Code gets two more, because it is the only host with a status line:
+# UserPromptSubmit to fetch, and the statusLine setting to render. Codex and
+# Gemini CLI have no equivalent footer, so inventing one for them would wire up
+# a hook that could never display anything.
 merge_hook() {
-  file="$1"; event="$2"; timeout="$3"; matcher="$4"
+  file="$1"; event="$2"; timeout="$3"; matcher="$4"; hookpath="$5"; backup="${6:-1}"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   # Values reach the program through the ENVIRONMENT, never argv. install.ps1
@@ -330,7 +376,7 @@ merge_hook() {
   # every later argument shifted by one and the hook path went missing. The
   # environment preserves an empty value and needs no quoting on either side.
   PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
-  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$HOOK" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$hookpath" PRMPT_BACKUP="$backup" \
   "$NODE_BIN" -e '
     const fs=require("fs");
     const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
@@ -344,15 +390,23 @@ merge_hook() {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
     }
-    // Back up before the first modification, never after.
-    if (raw) fs.copyFileSync(p, p+".bak");
+    // Back up before the FIRST modification, never after. Claude Code takes
+    // three passes over one file -- two hooks and the status line -- and a
+    // backup per pass would leave a .bak of our own half-finished work rather
+    // than of what the user actually had. PRMPT_BACKUP=0 says somebody already
+    // took it this run; unset means take it, so a standalone run still does.
+    if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
 
     j.hooks = j.hooks || {};
     const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
     // Drop any previous entry of ours so re-running cannot stack duplicates.
+    // Keyed on the script being installed rather than on one hard-coded name:
+    // there are two hooks now, on two different events, and a filter naming
+    // only the first would stack a duplicate of the second on every run.
+    const name = hook.split(/[\\/]/).pop();
     for (const g of groups) {
       if (Array.isArray(g.hooks)) {
-        g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
+        g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes(name)));
       }
     }
     // Quoted, because the install dir routinely contains a space: macOS puts
@@ -362,6 +416,47 @@ merge_hook() {
     if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
+    fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+  '
+}
+
+# The status line is a Claude Code surface and only Claude Code has one. It is
+# NOT a hook: it is a settings key holding a command, so it gets its own merge.
+#
+# The rule that matters here is that we WRAP rather than replace. Most people
+# who will install this already have a status line they built, and silently
+# taking it away over an ad plugin is the fastest way to be uninstalled.
+merge_statusline() {
+  file="$1"; hookpath="$2"; backup="${3:-1}"
+  mkdir -p "$(dirname "$file")"
+  [ -f "$file" ] || printf '{}\n' > "$file"
+  # Through the environment, never argv -- same reason as merge_hook.
+  PRMPT_CFG="$file" PRMPT_HOOK="$hookpath" PRMPT_STATE="$STATE_FILE" PRMPT_BACKUP="$backup" \
+  "$NODE_BIN" -e '
+    const fs=require("fs"), path=require("path");
+    const p=process.env.PRMPT_CFG, hook=process.env.PRMPT_HOOK, state=process.env.PRMPT_STATE;
+    let j={};
+    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
+    if (raw) {
+      try { j=JSON.parse(raw); }
+      catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
+    }
+    if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
+    const prev = (j.statusLine && typeof j.statusLine === "object") ? j.statusLine : {};
+    const prevCmd = typeof prev.command === "string" ? prev.command : "";
+    // Record theirs so our renderer can run it and uninstall can hand it back.
+    // Never record OUR OWN command: a re-install would otherwise make every
+    // render fork a fresh copy of the renderer, forever.
+    // Ours, told apart from anybody else by the DIRECTORY as well as the
+    // name -- see the uninstall program above.
+    if (prevCmd && !/hooks[\/\\]statusline\.mjs/.test(prevCmd)) {
+      fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
+      fs.writeFileSync(state, JSON.stringify(prev, null, 2)+"\n", { mode:0o600 });
+      fs.chmodSync(state, 0o600);
+    }
+    // Their other statusLine keys (padding and friends) are display preferences
+    // and are kept; only the command becomes ours.
+    j.statusLine = { ...prev, type:"command", command:`node ${JSON.stringify(hook)}` };
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
   '
 }
@@ -385,24 +480,50 @@ say ""
 say "${B}Wiring up agents${R} ${D}($SCOPE scope)${R}"
 CONFIGURED=0
 
-# Claude Code -- Stop, timeout in seconds.
+# Claude Code -- Stop, timeout in seconds, plus the OPT-IN status-line surface.
+#
+# The status line is never wired up for you, and that is a deliberate product
+# decision rather than caution. Claude Code drops most of its footer keyboard
+# hints -- "esc to interrupt" among them -- the moment any custom status line
+# exists. Taking a keybinding hint away from somebody who only asked for an ad
+# at the end of a turn is not a trade this installer makes on their behalf, and
+# on an upgrade it would take it away from every existing install at once.
+#
+# UserPromptSubmit is gated with it, not separately. That hook exists ONLY to
+# fetch a decision for the status line, so wiring it without somewhere to draw
+# the result would spend a request -- and send keywords derived from what the
+# user typed -- for an ad that could never appear.
 if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected claude || [ -d "$HOME/.claude" ]; }; }; then
-  if merge_hook "$CLAUDE_CFG" "Stop" 5 ""; then
+  if merge_hook "$CLAUDE_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Claude Code  $CLAUDE_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
+    if [ "${STATUSLINE:-0}" = "1" ]; then
+      if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK" 0; then
+        ok "             ${D}+ UserPromptSubmit (fetches the status-line slot)${R}"
+      fi
+      if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK" 0; then
+        if [ -f "$STATE_FILE" ]; then
+          ok "             ${D}+ statusLine (wrapping the one you already had)${R}"
+        else
+          ok "             ${D}+ statusLine${R}"
+        fi
+      fi
+    else
+      skip "status line not installed -- see below to turn it on"
+    fi
   fi
 else skip "Claude Code not found"; fi
 
 # Codex -- Stop, timeout in seconds. Same event name as Claude Code; the hook
 # tells them apart by CLAUDECODE=1 at runtime.
 if { [ -n "$AGENTS" ] && want codex; } || { [ -z "$AGENTS" ] && { detected codex || [ -d "$HOME/.codex" ]; }; }; then
-  if merge_hook "$CODEX_CFG" "Stop" 5 ""; then
+  if merge_hook "$CODEX_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Codex        $CODEX_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Codex not found"; fi
 
 # Gemini CLI -- AfterAgent, timeout in MILLISECONDS, and it wants a matcher.
 if { [ -n "$AGENTS" ] && want gemini; } || { [ -z "$AGENTS" ] && { detected gemini || [ -d "$HOME/.gemini" ]; }; }; then
-  if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*"; then
+  if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*" "$HOOK"; then
     ok "Gemini CLI   $GEMINI_CFG  ${D}(AfterAgent, ms)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Gemini CLI not found"; fi
@@ -482,6 +603,26 @@ say ""
 say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
+if [ "${STATUSLINE:-0}" = "1" ]; then
+  if [ -f "$STATE_FILE" ]; then
+    say ""
+    say "  ${D}Your status line still runs; ours is drawn on the row beneath it,"
+    say "  and --uninstall gives yours back exactly as it was.${R}"
+  fi
+else
+  # Said whether or not Claude Code is present: the trade-off is the reason
+  # this is off, and somebody deciding to turn it on deserves to know the cost
+  # before they do, not after their key hints have gone.
+  say ""
+  say "  ${D}Not installed: the status line.${R} The same ad can also sit on the row"
+  say "  above your prompt while the model works, refreshed from the prompt you"
+  say "  just typed. It is off because Claude Code hides most of its footer key"
+  say '  hints -- including "esc to interrupt" -- whenever a custom status line'
+  say "  is set. That is Claude Code behaviour, not something prmpt chooses."
+  say ""
+  say "  ${D}Turn it on:${R}   $NODE_BIN $CLI statusline install"
+  say "                  ${D}(or re-run this installer with --statusline)${R}"
+fi
 say ""
 # The login above already printed a signed-in link, but that code lives two
 # minutes -- long dead by the time somebody reads this and comes back. So the
