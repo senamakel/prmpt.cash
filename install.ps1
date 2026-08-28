@@ -102,15 +102,23 @@ if (raw) {
   try { j=JSON.parse(raw); }
   catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
 }
-// Back up before the first modification, never after.
-if (raw) fs.copyFileSync(p, p+".bak");
+// Back up before the FIRST modification, never after. Claude Code takes
+// three passes over one file -- two hooks and the status line -- and a
+// backup per pass would leave a .bak of our own half-finished work rather
+// than of what the user actually had. PRMPT_BACKUP=0 says somebody already
+// took it this run; unset means take it, so a standalone run still does.
+if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
 
 j.hooks = j.hooks || {};
 const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
 // Drop any previous entry of ours so re-running cannot stack duplicates.
+// Keyed on the script being installed rather than on one hard-coded name:
+// there are two hooks now, on two different events, and a filter naming
+// only the first would stack a duplicate of the second on every run.
+const name = hook.split(/[\\/]/).pop();
 for (const g of groups) {
   if (Array.isArray(g.hooks)) {
-    g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
+    g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes(name)));
   }
 }
 // Quoted, because the install dir routinely contains a space: macOS puts
@@ -124,7 +132,8 @@ fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
 $CleanJs = @'
-const fs=require("fs"), p=process.env.PRMPT_CFG;
+const fs=require("fs"), p=process.env.PRMPT_CFG, state=process.env.PRMPT_STATE;
+const OURS=["turn-end.mjs","prompt-start.mjs"];
 let j; try { j=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")); } catch { process.exit(1); }
 let hit=false;
 for (const ev of Object.keys(j.hooks||{})) {
@@ -133,15 +142,52 @@ for (const ev of Object.keys(j.hooks||{})) {
   for (const g of groups) {
     if (!Array.isArray(g.hooks)) continue;
     const before=g.hooks.length;
-    g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && h.command.includes("turn-end.mjs")));
+    g.hooks=g.hooks.filter(h=>!(typeof h?.command==="string" && OURS.some(n=>h.command.includes(n))));
     if (g.hooks.length!==before) hit=true;
   }
   j.hooks[ev]=groups.filter(g=>Array.isArray(g.hooks) ? g.hooks.length>0 : true);
   if (j.hooks[ev].length===0) delete j.hooks[ev];
 }
 if (j.hooks && Object.keys(j.hooks).length===0) delete j.hooks;
+// Give the status line back. Whatever was there before we arrived was
+// recorded at install time; without this the user is left with a footer
+// that runs a script we just deleted.
+const sl=j.statusLine;
+if (sl && typeof sl.command==="string" && sl.command.includes("status-line.mjs")) {
+  let wrapped="";
+  try { wrapped=JSON.parse(fs.readFileSync(state,"utf8")).wrapped||""; } catch {}
+  if (wrapped) j.statusLine={...sl, type:"command", command:wrapped}; else delete j.statusLine;
+  try { fs.rmSync(state,{force:true}); } catch {}
+  hit=true;
+}
 if (!hit) process.exit(2);
 fs.copyFileSync(p, p+".bak");
+fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+'@
+
+$StatusJs = @'
+const fs=require("fs"), path=require("path");
+const p=process.env.PRMPT_CFG, hook=process.env.PRMPT_HOOK, state=process.env.PRMPT_STATE;
+let j={};
+const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
+if (raw) {
+  try { j=JSON.parse(raw); }
+  catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
+}
+if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
+const prev = (j.statusLine && typeof j.statusLine === "object") ? j.statusLine : {};
+const prevCmd = typeof prev.command === "string" ? prev.command : "";
+// Record theirs so our renderer can run it and uninstall can hand it back.
+// Never record OUR OWN command: a re-install would otherwise make every
+// render fork a fresh copy of the renderer, forever.
+if (prevCmd && !prevCmd.includes("status-line.mjs")) {
+  fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
+  fs.writeFileSync(state, JSON.stringify({ wrapped: prevCmd }, null, 2)+"\n", { mode:0o600 });
+  fs.chmodSync(state, 0o600);
+}
+// Their other statusLine keys (padding and friends) are display preferences
+// and are kept; only the command becomes ours.
+j.statusLine = { ...prev, type:"command", command:`node ${JSON.stringify(hook)}` };
 fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
 '@
 
