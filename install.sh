@@ -112,7 +112,7 @@ done
 # -- can be stopped from signing in without having to remember the flag at every
 # call site. Forgetting it is not a harmless mistake: without it the installer
 # signs in against the DEFAULT endpoint, which is production, and creates a real
-# publisher account behind a wallet that dies with the machine.
+# user account behind a wallet that dies with the machine.
 [ "${PRMPT_NO_LOGIN:-}" = "1" ] && NO_LOGIN=1
 if [ -z "$INSTALL_DIR" ]; then
   INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/prmpt"

@@ -1,20 +1,195 @@
 # prmpt.cash
 
-**Earn free crypto for the replies your coding agent already writes.**
+**Get paid to use Claude Code.**
 
-When your agent finishes a reply, this hook asks whether any advertiser actually
-matches what you just did. Almost always the answer is no and nothing prints. Once
-in a while it is yes, and you get one clearly-labelled line. **Click it and you get
-paid**, straight to your wallet, usually within a second, in whichever token you
-picked.
+Not for clicking anything. Not for writing about us. For the coding you were going
+to do anyway: install this, keep working, and your agent starts earning. It works
+the same in Codex, Gemini CLI, Amp and Cursor.
 
-In Claude Code there is a second place it can appear: a short segment appended to
-your **status line**, the footer that renders while the model is working. It is
-appended to the status line you already have, never in place of it, and it is
-capped at 60 characters. See [Two places an ad can appear](#two-places-an-ad-can-appear).
+The way that happens is advertising, and we would rather say so in the first
+paragraph than four screens down. An advertiser pays to reach a developer at the
+moment a real problem is on screen; **70% of what they pay goes to you**, and it is
+paid for the ad being *shown*. Clicking pays you again, but you never have to. There
+is nothing to watch, nothing to post, and nothing to sign up for.
 
-You never had to sell anything, watch anything or click anything. Advertisers are
-paying for the moment a real problem is on your screen, and this is your share of it.
+One plugin, two places an ad can appear, and both of them earn:
+
+| | **End of turn** | **Status line** |
+|---|---|---|
+| When | once, as the reply finishes | while the model is still working |
+| Where | one labelled block under the answer | one dim row directly above your prompt |
+| Hosts | Claude Code, Codex, Gemini CLI, Amp, Cursor† | **Claude Code only** |
+| Matched on | the agent's final message | keywords derived from your prompt, on your machine |
+| | **on by default** | **opt-in — `prmpt statusline install`** |
+
+Earnings go straight to a wallet on your own machine, in whichever token you picked
+— USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana. The installer creates
+that wallet for you, so there is no account and no key to paste.
+
+It stays quiet. Most turns match nothing and print nothing, one line is the entire
+end-of-turn footprint, and nothing about your session slows down: one request, a
+hard 1.5s budget, and silence on anything that misses it.
+
+```sh
+curl -fsSL https://prmpt.cash/install.sh | sh
+```
+
+Zero runtime dependencies. Plain ESM. Node 18+. GPL-3.0-or-later.
+
+---
+
+## Why this repo is public
+
+Everything that runs inside your agent session is here, and none of it is minified,
+bundled or obfuscated. That is deliberate, because of what we are asking for: a
+plugin that reads the text of your turns and, if you opt in, some words from your
+prompts. You should not have to take our word for what it does with them.
+
+So the four files that matter are short, and they are the ones to read:
+
+| Read this | To check |
+|---|---|
+| [`hooks/turn-end.mjs`](hooks/turn-end.mjs) | what leaves the machine at the end of a turn, and that failure is silent |
+| [`hooks/lib/tokens.mjs`](hooks/lib/tokens.mjs) | ~40 lines. Exactly how a prompt is reduced to keywords before anything is sent |
+| [`hooks/statusline.mjs`](hooks/statusline.mjs) | that the status-line renderer makes no network call, ever |
+| [`install.sh`](install.sh) | every file it touches, in one POSIX shell script |
+
+The licence backs that up rather than just inviting you to look: it is
+GPL-3.0-or-later, so anything built on this client stays open on the same terms and
+a shipped fork cannot quietly close the part you were meant to be able to audit.
+
+The backend is not open — the auction, pricing and payout code is the product. The
+client is, because the client is the part that sits inside your editor. Where the
+two disagree about what we claim, the client is checkable and this README tries to
+be specific enough to be caught out.
+
+Two more things we would rather say plainly than bury:
+
+- **The transparency stops at the wire.** You can verify what is sent. You cannot
+  verify from here what we do with it after it arrives. What we can offer is that
+  the [analytics page](https://prmpt.cash/analytics) is public and needs no account,
+  and every payout is a real on-chain transaction listed with its signature.
+- **The release checksum proves integrity, not authenticity** — see
+  [It keeps itself up to date](#it-keeps-itself-up-to-date), which does not soften it.
+
+---
+
+## The two surfaces, in detail
+
+### End of turn — on by default
+
+When your agent finishes a reply, the hook posts that turn's final text and asks
+whether any advertiser matches it. Almost always the answer is no and nothing
+prints. When it is yes, you get one clearly-labelled block:
+
+```
+Sponsored · Stop re-running flaky tests until green
+Quarantine detects flaky tests from your CI history and isolates them
+https://prmpt.cash/7q
+```
+
+The headline is rewritten for *your* turn rather than being boilerplate. That
+impression is billed and credited to you the moment it is served. The link is our
+own redirect: it records the click, pays you again, and 302s to the advertiser.
+
+Works on Claude Code, Codex, Gemini CLI and Amp out of the box — each of them can
+hand a hook the finished turn and show the answer back to you. †Cursor supplies the
+turn but has nowhere to draw it, so it needs the
+[editor extension](vscode/README.md) as its display.
+
+### Status line — opt-in, Claude Code only
+
+One dim row appended beneath whatever status line you already had, rendered while
+the model is thinking:
+
+```
+my-repo (main) Opus | 41% left
+Sponsored · Quarantine flaky tests — detects flakes from CI history ↗
+```
+
+The click URL is attached as a terminal hyperlink rather than printed, so the row
+stays short. It is clickable in iTerm2, Kitty and WezTerm, and plain text elsewhere.
+
+```sh
+prmpt statusline install       # also: status, preview, uninstall
+curl ... | sh -s -- --statusline    # or ask for it during install
+```
+
+**It stays off until you ask for it**, and that is not modesty. Claude Code hides
+most of its footer keyboard hints — including `esc to interrupt` — the moment *any*
+custom status line is set. That is Claude Code's behaviour, not ours, but it is a
+real cost, and trading somebody's keybinding hints for an ad placement is not a
+choice an installer gets to make on their behalf.
+
+**It wraps the status line you already have.** If `statusLine` in
+`~/.claude/settings.json` already points at a command, the installer records it,
+runs it, keeps its output above ours and puts our row closest to the prompt. Your
+command gets the same JSON on stdin Claude Code would have given it. On a host that
+renders only one row, yours wins and nothing of ours is drawn.
+`prmpt statusline uninstall` gives it back exactly as it was.
+
+**Claude Code only, on purpose.** Codex and Gemini CLI have no equivalent footer,
+and inventing config for them would wire up something that could never display
+anything. Codex's `[tui] status_line` takes identifiers from a fixed list of
+built-in items and cannot run a command at all — see
+[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
+otherwise unaffected: its `Stop` hook still matches your turns, still prints the
+end-of-turn line, and still parks a slot the editor extension can render.
+
+#### The status line has two fillers, and only one of them costs you privacy
+
+Both write the same file, `~/.config/prmpt/slot.json`, and whichever wrote last is
+what you see:
+
+- **The parked ad.** When a turn ends and matches, that decision is *already*
+  served and already paid. It is parked, and the status line keeps showing it while
+  you read the answer and type the next prompt, until it ages out after 30 minutes.
+  **This sends nothing new** — the request already happened — and it earns nothing
+  new either: it is the same impression, still on screen.
+- **The prompt-fetched ad.** When you press enter, a detached child asks for a
+  decision matched to *this* prompt and parks that instead. It is fresher, it is its
+  own impression on its own surface, and it earns you a second time — billed once,
+  the first time it is actually drawn. This is the path that sends keywords derived
+  from your prompt; see [What is sent](#what-is-sent).
+
+A fetch that misses, or does not come back in time, writes nothing at all, so the
+parked ad is still there and the row never goes blank.
+
+**The renderer makes no network call, ever.** Claude Code re-runs a status-line
+command continuously and watches it for slowness. Both fillers write a small file
+from somewhere else; the renderer reads that file and prints one row.
+
+> The `/plugin install` route wires the end-of-turn hook and **nothing else**.
+> `statusLine` is a settings key rather than a hook and a Claude Code plugin can
+> only declare hooks, so there would be nowhere to draw the row — which is also why
+> that route does not carry the `UserPromptSubmit` fetch hook. Use
+> `prmpt statusline install` to add the surface.
+
+---
+
+## How the money works
+
+**You are paid for being shown an ad, not for reacting to one.** That is the whole
+difference between this and every "monetize your audience" scheme: there is no
+action you have to take. An advertiser bids a CPM and a CPC, the auction ranks on
+expected value, and the winner pays what it cleared at. **70% of that is yours** when
+the ad is shown, and 70% of the click price on top if it is ever clicked.
+
+**How much, honestly:** one impression is worth a fraction of a cent, and a click is
+worth meaningfully more than one. This is beer money that arrives while you work,
+not an income — and the daily cap below says out loud where the ceiling is. We would
+rather you find that out here than after a month of watching a balance.
+
+**Impressions accrue; clicks settle immediately.** A single status-line impression
+is worth a fraction of a cent, and sending a fraction of a cent on-chain costs more
+than it is worth. So impression earnings accumulate and only mint a payout once they
+cross **$1.00**. A click skips the threshold and settles on its own. Either way the
+lifetime total moves the instant the event happens, so what you earned is visible
+before it is sent.
+
+**The balance is kept in dollars.** It is converted to your token only when a payout
+settles, at the price fetched right then, so switching tokens changes what the *next*
+payout arrives as and nothing that has already been paid.
 
 | Token   | Chain  | What it is                                                  |
 | ------- | ------ | ----------------------------------------------------------- |
@@ -25,13 +200,23 @@ paying for the moment a real problem is on your screen, and this is your share o
 | `USDC`  | Base   | A dollar that stays a dollar. The default, and the stable answer |
 | `XAUT`  | Solana | Tether Gold, if you would rather your terminal habit bought bullion. `XAUt0` on chain |
 
-Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
-converted only when a payout settles, at the price right then, so switching changes
-what the next payout arrives as and nothing that has already been paid.
+Pick one at <https://prmpt.cash/earnings>. Every payout is a real on-chain
+transaction, listed there with its signature.
 
-It creates the wallet itself, so installing is one command with nothing to sign
-up for. Zero runtime dependencies. Plain ESM. Node 18+. Works with Claude Code,
-Codex, Gemini CLI and Amp.
+### There is a daily earnings cap, and you can lift it
+
+A fresh install with nothing linked to it earns up to **$1.00 a day**. Link one
+account — GitHub or X — and it becomes **$10.00 a day**. Link both and the cap comes
+off entirely.
+
+```sh
+prmpt onboard        # opens the page that links them
+```
+
+It is a spam control, not a tier list: a wallet is free to create and an uncapped
+one would be farmed within a day. The cap is applied to *serving* rather than to
+paying, so over the cap you simply stop being sent ads — you never accrue a balance
+we would then have to refuse.
 
 ---
 
@@ -51,11 +236,11 @@ irm https://prmpt.cash/install.ps1 | iex
 
 That downloads the latest **release**, verifies its SHA-256 against the
 `SHA256SUMS` published alongside it, detects the agents you have, wires each one
-up using *its own* documented hook, **creates a Solana wallet for you**, proves
-it to the backend by signature and stores both at mode 0600. Restart your agent
-and carry on working. There is no account to make and no code to paste.
+up using *its own* documented hook, **creates a wallet for you**, proves it to the
+backend by signature and stores both at mode 0600. Restart your agent and carry on
+working. There is no account to make and no code to paste.
 
-Pin a version with `--version v0.2.0`; releases are at
+Pin a version with `--version v0.3.0`; releases are at
 [github.com/senamakel/prmpt.cash/releases](https://github.com/senamakel/prmpt.cash/releases).
 
 Already have a wallet you would rather be paid into? Import its seed phrase or
@@ -85,7 +270,8 @@ git clone https://github.com/senamakel/prmpt.cash
 
 ```
 --no-login           install and wire up the agents, but create no wallet
---version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
+--statusline         also install the Claude Code status-line surface
+--version <tag>      install a specific release, e.g. v0.3.0 (default: latest)
 --agents <list>      claude,codex,gemini,amp   (default: autodetect)
 --endpoint <url>     point at your own deployment
 --dir <path>         where to install (default: $XDG_DATA_HOME/prmpt)
@@ -106,7 +292,7 @@ one thing to write down, and they import into either wallet unchanged.
 
 It signs in with those keys itself, which is what makes first run self-service:
 Sign-In With Solana asks the server for a one-time challenge, signs the exact
-message it minted, and gets back a publisher JWT. The Base address is then
+message it minted, and gets back a user JWT. The Base address is then
 proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
 
@@ -116,7 +302,9 @@ Base, and SOL, TINY and XAUT on Solana. You choose on the dashboard.
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
 prmpt dashboard                 # open the web dashboard, signed in as this install
+prmpt onboard                   # link GitHub or X to lift the daily cap
 prmpt status                    # wallet, token, expiry, endpoint; nothing secret
+prmpt statusline install        # add the second surface (Claude Code)
 prmpt wallet                    # print both addresses
 prmpt wallet mnemonic           # print the seed phrase; this is the backup
 prmpt wallet new [--force]      # generate a fresh phrase and both keys
@@ -184,140 +372,6 @@ travels only in the `Authorization: Bearer` header of the serve request.
 It is also long-lived and **cannot be revoked**: it stays valid until it
 expires, so treat that config file as the credential it is. `prmpt logout`
 forgets it locally; it does not invalidate a copy taken beforehand.
-
-## It keeps itself up to date
-
-Once a day the hook detaches a child that asks GitHub for the latest release.
-If there is a newer one it downloads it, checks the SHA-256 against the release's
-`SHA256SUMS`, unpacks it beside the install and swaps the two by rename. Your
-agent picks it up on its next restart.
-
-```sh
-prmpt update --check              # what would happen, changing nothing
-prmpt update                      # do it now
-prmpt update --version v0.2.0     # pin a release (may be a downgrade)
-export PRMPT_NO_AUTO_UPDATE=1     # never update on its own
-```
-
-Being honest about what that does and does not guarantee:
-
-- **The checksum proves integrity, not authenticity.** `SHA256SUMS` ships as an
-  asset of the same release as the tarball, so verifying it catches a truncated
-  download or a proxy serving the wrong bytes. It does not prove the release is
-  genuine, because anyone who could publish a release could publish a matching sum.
-  That trust is anchored in GitHub and in who holds release permission on the
-  repository. Detached signing is what would change that, and is not done yet.
-- **Nothing is unpacked before it verifies.** Checksum first, then extract, then
-  a check that the archive actually contains a plugin. Any failure leaves the
-  install exactly as it was.
-- **The swap is a rename, with the old tree kept until the new one lands.** If
-  the second rename fails, the old one goes back.
-- **Your credentials are never in the blast radius.** The token and wallet key
-  live in `~/.config/prmpt`, not in the install directory, so neither an update
-  nor a failed update can touch them. There is a test that asserts exactly this.
-- **A git checkout is never touched.** If you are developing the plugin, update
-  it with git; the auto-updater refuses outright and does not even check.
-
-## Two places an ad can appear
-
-| Surface | When | Where | Hosts | |
-|---|---|---|---|---|
-| End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp | on by default |
-| Status line | while the model is working | one dim row above your prompt | **Claude Code only** | **opt-in** |
-
-**The status line is opt-in, and stays off until you ask for it.** Claude Code
-hides most of its footer keyboard hints — including `esc to interrupt` — the
-moment *any* custom status line is set. That is Claude Code's behaviour, not
-ours, but it is a real cost, and trading somebody's keybinding hints for an ad
-placement is not a choice an installer gets to make on their behalf. So a
-default install wires the end-of-turn line and nothing else, and says so.
-
-```sh
-$ prmpt statusline install     # also: status, preview, uninstall
-$ curl ... | sh -s -- --statusline    # or ask for it up front
-```
-
-Either route turns on the whole surface: the row itself, and the
-`UserPromptSubmit` hook that fetches something fresher to put in it.
-`prmpt statusline uninstall` removes both, and gives back any status line you
-already had.
-
-**The status line is Claude Code only, on purpose.** Codex and Gemini CLI have no
-equivalent footer, and inventing config for them would wire up something that
-could never display anything. Cursor and Windsurf are absent for the same
-reason they always were. (Codex's `[tui] status_line` accepts identifiers from a
-fixed list of built-in items and cannot run a command — see
-[openai/codex#17827](https://github.com/openai/codex/issues/17827). Codex is
-otherwise unaffected: its `Stop` hook still matches your turns, still prints the
-end-of-turn line, and still parks a slot the editor extension can render.)
-
-### The status line has two fillers
-
-They write the same file, `~/.config/prmpt/slot.json`, and whichever wrote last
-is what you see. They are not the same thing, and the difference is what you are
-charged in privacy for:
-
-- **The parked ad.** When a turn ends and matches, that decision is *already*
-  served and already paid for. It is parked, and the status line keeps showing
-  it while you read the answer and type the next prompt, until it ages out after
-  30 minutes. **This sends nothing new** — the request already happened — and it
-  earns you nothing new either: it is the same impression, still on screen.
-- **The prompt-fetched ad.** When you press enter, a detached child asks for a
-  decision matched to *this* prompt and parks that instead. It is fresher, it is
-  its own impression on its own surface, and it is billed once — the first time
-  it is actually drawn. This is the path that sends keywords derived from your
-  prompt; see [What is sent](#what-is-sent), which does not soften it.
-
-A fetch that misses, or does not come back in time, writes nothing at all, so
-the parked ad is still there and the row does not go blank.
-
-**It wraps the status line you already have.** If `statusLine` in
-`~/.claude/settings.json` already points at a command, the installer records it
-and ours runs it, keeps its output above ours, and puts our row closest to the
-prompt. Your command is handed the same JSON on stdin that Claude Code would
-have given it. On a host that renders only one row, yours wins and nothing of
-ours is drawn. `--uninstall`, and `prmpt statusline uninstall`, give your
-original command back exactly as it was.
-
-Three more things worth knowing:
-
-- The renderer **makes no network call, ever.** Claude Code re-runs a status-line
-  command continuously and watches it for slowness. Both fillers write a small
-  file from somewhere else; the renderer reads that file and prints one row.
-- **Claude Code hides most of its footer key hints while a custom status line is
-  set** — including `esc to interrupt`. That is Claude Code's behaviour, not
-  ours. Removing the status line brings them back.
-- The `/plugin install` route wires the end-of-turn hook and **nothing else**.
-  `statusLine` is a settings key rather than a hook, and a Claude Code plugin can
-  only declare hooks, so there would be nowhere to draw the row — which is also
-  why that route does not carry the `UserPromptSubmit` fetch hook. Use
-  `prmpt statusline install` to add the surface.
-
-## What it looks like
-
-```
-Sponsored · Stop re-running flaky tests until green
-Quarantine detects flaky tests from your CI history and isolates them
-https://prmpt.cash/7q
-```
-
-and, in the status line, one dim row directly above your prompt, beneath
-whatever status line you already had:
-
-```
-my-repo (main) Opus | 41% left
-Sponsored · Quarantine flaky tests — detects flakes from CI history ↗
-```
-
-The click URL is attached as a terminal hyperlink rather than printed, so the
-row stays short; it is clickable in iTerm2, Kitty and WezTerm and is plain text
-everywhere else.
-
-The headline is rewritten for *your* turn, not boilerplate. The link is our own
-redirect: it records the click, pays you in your chosen token, and 302s to the
-advertiser. Every payout is a real on-chain transaction, listed with its
-signature at <https://prmpt.cash/earnings> and counted on the public
-[analytics page](https://prmpt.cash/analytics).
 
 ## It cannot break your session
 
@@ -390,21 +444,60 @@ nothing — working. `PRMPT_DISABLED=1` turns everything off.
 
 See [`.env.example`](.env.example) for every knob.
 
+## It keeps itself up to date
+
+Once a day the hook detaches a child that asks GitHub for the latest release.
+If there is a newer one it downloads it, checks the SHA-256 against the release's
+`SHA256SUMS`, unpacks it beside the install and swaps the two by rename. Your
+agent picks it up on its next restart.
+
+```sh
+prmpt update --check              # what would happen, changing nothing
+prmpt update                      # do it now
+prmpt update --version v0.3.0     # pin a release (may be a downgrade)
+export PRMPT_NO_AUTO_UPDATE=1     # never update on its own
+```
+
+Being honest about what that does and does not guarantee:
+
+- **The checksum proves integrity, not authenticity.** `SHA256SUMS` ships as an
+  asset of the same release as the tarball, so verifying it catches a truncated
+  download or a proxy serving the wrong bytes. It does not prove the release is
+  genuine, because anyone who could publish a release could publish a matching sum.
+  That trust is anchored in GitHub and in who holds release permission on the
+  repository. Detached signing is what would change that, and is not done yet.
+- **Nothing is unpacked before it verifies.** Checksum first, then extract, then
+  a check that the archive actually contains a plugin. Any failure leaves the
+  install exactly as it was.
+- **The swap is a rename, with the old tree kept until the new one lands.** If
+  the second rename fails, the old one goes back.
+- **Your credentials are never in the blast radius.** The token and wallet key
+  live in `~/.config/prmpt`, not in the install directory, so neither an update
+  nor a failed update can touch them. There is a test that asserts exactly this.
+- **A git checkout is never touched.** If you are developing the plugin, update
+  it with git; the auto-updater refuses outright and does not even check.
+
 ## Supported agents
 
-| Agent | Event | Config |
-|---|---|---|
-| Claude Code | `Stop` | `~/.claude/settings.json`, timeout in **seconds** |
-| Claude Code | `UserPromptSubmit` | same file — fetches the status-line slot. **Opt-in** |
-| Claude Code | `statusLine` | same file — renders it. Wraps an existing command. **Opt-in** |
-| Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
-| Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
-| Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
-| Cursor | `afterAgentResponse` | plus the editor extension for display. See [`vscode/`](vscode/README.md) |
+| Agent | Event | Surface | Config |
+|---|---|---|---|
+| Claude Code | `Stop` | end of turn | `~/.claude/settings.json`, timeout in **seconds** |
+| Claude Code | `UserPromptSubmit` | status line — fetches the slot. **Opt-in** | same file |
+| Claude Code | `statusLine` | status line — renders it, wrapping any existing command. **Opt-in** | same file |
+| Codex | `Stop` | end of turn | `~/.codex/hooks.json`, timeout in **seconds** |
+| Gemini CLI | `AfterAgent` | end of turn | `~/.gemini/settings.json`, timeout in **milliseconds** |
+| Amp | `agent.end` | end of turn | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
+| Cursor | `afterAgentResponse` | end of turn, via the editor extension | see [`vscode/`](vscode/README.md) |
 
 Those units and event names are not interchangeable; the installer handles each
 correctly. Per-host detail lives in [`codex/`](codex/README.md),
-[`gemini/`](gemini/README.md) and [`amp/`](amp/README.md).
+[`gemini/`](gemini/README.md), [`amp/`](amp/README.md) and
+[`vscode/`](vscode/README.md).
+
+**A host that can supply a turn and a host that can display one are not the same
+set.** That is the reason the parked-slot file exists at all: Codex supplies turn
+text and has nowhere good to put a persistent ad, and Cursor had no display at all
+until the extension. One host's turn can be rendered by another host's surface.
 
 **Windsurf is deliberately absent.** It can hand a hook the finished turn, but
 documents no way for that hook to show you anything. An ad could be matched and
@@ -439,7 +532,7 @@ without them is invisible to both.
 ```sh
 # 1. bump the version in package.json, commit it
 # 2. tag it. The tag must match package.json exactly
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 The workflow refuses a tag that disagrees with `package.json`. That check is
@@ -465,8 +558,8 @@ npm run test:all   # both
 `npm test` spawns the real hook and the real CLI as subprocesses against stub
 servers on ephemeral ports, so it exercises exit codes, streams and the wire
 rather than internal functions. The stub verifies SIWS signatures the same way
-`backend/internal/auth/siws.go` does, against the exact message it minted, so
-a client that rebuilt the message locally fails there rather than in production.
+the backend does, against the exact message it minted, so a client that rebuilt
+the message locally fails there rather than in production.
 
 `npm run test:smoke` covers the step before that one, which is easy to get wrong
 and impossible to notice: running the installer for real, then executing the
@@ -519,8 +612,8 @@ export PRMPT_ENDPOINT=http://localhost:8080/graphql
 ~/.local/share/prmpt/install.sh --uninstall
 ```
 
-Your hook entries are removed and each touched config is backed up next to
-itself as `.bak`.
+Your hook entries are removed, the status line you had before is put back, and
+each touched config is backed up next to itself as `.bak`.
 
 **Neither your token nor your wallet key is deleted**, on purpose:
 `~/.config/prmpt/wallet.json` is the only copy of a key that may hold money, and
@@ -532,4 +625,10 @@ can, and a copy taken beforehand keeps working until it expires.
 
 ## License
 
-MIT
+GNU General Public License v3.0 or later. The full text is in [LICENSE](LICENSE).
+
+Copyright (C) 2026 prmpt.cash
+
+Releases up to and including v0.3.0 were published under the MIT licence. That
+grant stands for those versions -- a licence already given cannot be withdrawn --
+so this change binds v0.3.1 onward.

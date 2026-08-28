@@ -2,8 +2,8 @@
   "name": "prmpt",
   "displayName": "prmpt",
   "description": "Shows the sponsored line prmpt matched for your last agent turn, and pays you 70% of the click price.",
-  "version": "0.2.0",
-  "license": "MIT",
+  "version": "0.3.0",
+  "license": "GPL-3.0-or-later",
   "publisher": "prmpt",
   "icon": "media/icon.png",
   "repository": {

@@ -1,5 +1,10 @@
 # prmpt on Amp
 
+**Amp earns you the end-of-turn line, and nothing else.** Of the
+[two surfaces](../README.md#the-two-surfaces-in-detail) prmpt can pay you on, Amp
+supports one: a labelled notification when the turn finishes. Amp exposes no
+persistent footer, so the status-line surface is Claude Code only.
+
 Amp has no shell-hook config file. Plugins are TypeScript modules that subscribe to lifecycle
 events, so this is the one host that does not reuse `hooks/turn-end.mjs`. `prmpt.ts` in this
 directory is the equivalent, and behaves identically: one request, 1.5s budget, silent on anything
@@ -33,6 +38,10 @@ Create or import a local wallet and sign in the same way as every other host:
 prmpt wallet import -   # omit this line to create a fresh wallet
 prmpt login
 ```
+
+See the [main README](../README.md) for how the money works — 70% of the clearing
+price on both the impression and the click, which tokens a payout can settle in, the
+daily earnings cap and how to lift it, and exactly what data is sent.
 
 ## How it works
 

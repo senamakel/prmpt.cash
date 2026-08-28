@@ -6,7 +6,7 @@
 //
 // Self-enrolment does not cover this. It fires only when there is NO token, and
 // these installs have one, so they update to the new plugin and then sit there
-// unchanged forever. Every existing publisher is in exactly that state, which
+// unchanged forever. Every existing user is in exactly that state, which
 // is why this exists rather than a line in a release note asking people to
 // re-run `prmpt login`.
 //
@@ -60,7 +60,7 @@ function markAttempt() {
  * that flow exists. Generating an EVM key here and attaching it to their
  * account would put a key on a box they specifically chose to keep keys off,
  * and it would do it silently. So this only ever runs where the local key IS
- * already the publisher's identity, and those installs are told to link from
+ * already the user's identity, and those installs are told to link from
  * the dashboard instead.
  */
 export function needsEvmLink(config) {
@@ -89,7 +89,7 @@ function localWalletAddress() {
  *
  * It runs `prmpt link-evm`, NOT `prmpt login`. The difference is not cosmetic:
  * `login` signs in as whatever key is on this machine, so on an install whose
- * token belongs to a different wallet it would quietly switch the publisher —
+ * token belongs to a different wallet it would quietly switch the user —
  * and the user would start earning into an account they have never seen. This
  * subcommand only ever adds an address to the account the stored token already
  * speaks for.

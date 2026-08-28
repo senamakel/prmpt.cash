@@ -20,7 +20,7 @@
       },
       "homepage": "https://prmpt.cash",
       "repository": "https://github.com/senamakel/prmpt.cash",
-      "license": "MIT",
+      "license": "GPL-3.0-or-later",
       "keywords": [
         "ads",
         "sponsorship",

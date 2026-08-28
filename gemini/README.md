@@ -1,5 +1,11 @@
 # prmpt on Gemini CLI
 
+**Gemini CLI earns you the end-of-turn line, and nothing else.** Of the
+[two surfaces](../README.md#the-two-surfaces-in-detail) prmpt can pay you on, Gemini
+supports one: a labelled block printed under the finished reply, on by default.
+Gemini CLI has no persistent footer a command can write to, so the status-line
+surface is Claude Code only and no config for it is written here.
+
 Gemini CLI fires an `AfterAgent` hook when the agent finishes producing a response, and hands it the
 final text. `hooks/turn-end.mjs` handles it with no changes.
 
@@ -49,7 +55,10 @@ prmpt wallet import -
 prmpt login
 ```
 
-Shared with every other host. See the [main README](../README.md).
+One wallet, shared with every other host on this machine. See the
+[main README](../README.md) for how the money works — 70% of the clearing price on
+both the impression and the click, which tokens a payout can settle in, the daily
+earnings cap and how to lift it, and exactly what data is sent.
 
 ## Environment
 

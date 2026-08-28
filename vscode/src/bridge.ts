@@ -83,9 +83,14 @@ export class Bridge {
           body: ad.body,
         } : null));
       });
+      // Only a server that actually bound becomes the one dispose() closes. A
+      // failed attempt used to overwrite it, so a window that fell through to
+      // the next port left its real listener open for the life of the process.
       server.once('error', reject);
-      server.listen(port, '127.0.0.1', () => resolve(port));
-      this.server = server;
+      server.listen(port, '127.0.0.1', () => {
+        this.server = server;
+        resolve(port);
+      });
     });
   }
 

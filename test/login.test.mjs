@@ -44,7 +44,7 @@ function startStub({ onVerify = () => {} } = {}) {
           'prmpt.cash wants you to sign in with your Solana account:',
           variables.wallet,
           '',
-          'Sign in to your prmpt publisher account. This proves you own this wallet.',
+          'Sign in to your prmpt user account. This proves you own this wallet.',
           '',
           'URI: https://prmpt.cash',
           'Version: 1',
@@ -81,7 +81,7 @@ function startStub({ onVerify = () => {} } = {}) {
           siwsVerify: {
             token: TOKEN,
             expiresAt: '2099-01-01T00:00:00Z',
-            publisher: { installId: 'install-from-server', solanaWallet: variables.wallet },
+            user: { installId: 'install-from-server', solanaWallet: variables.wallet },
           },
         });
       }

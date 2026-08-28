@@ -57,7 +57,7 @@ function siwsHandler(state) {
           siwsVerify: {
             token: ENROLLED_TOKEN,
             expiresAt: '2099-01-01T00:00:00Z',
-            publisher: { installId: 'enrolled-install', solanaWallet: body.variables.wallet },
+            user: { installId: 'enrolled-install', solanaWallet: body.variables.wallet },
           },
         },
       };
