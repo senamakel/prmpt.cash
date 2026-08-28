@@ -132,8 +132,11 @@ test('the recorded command is executable by this platform', async () => {
   // The single most valuable assertion in this file. An install that writes a
   // path the host cannot resolve — an MSYS path on Windows, an unquoted space
   // anywhere — produces a config that looks perfect and never runs.
+  //
+  // Opts into the status line so that EVERY command the installer can record is
+  // covered, including the one only --statusline writes.
   const box = sandbox();
-  await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  await installAll(box, { statusLine: true });
 
   for (const host of HOSTS) {
     const config = readJSON(hostConfigPath(box, host));
