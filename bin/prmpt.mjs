@@ -36,6 +36,16 @@ import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
 import { createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
+import {
+  installClaude,
+  installCodex,
+  uninstallClaude,
+  uninstallCodex,
+  statusAll,
+  detectHosts,
+} from '../hooks/lib/statusline-install.mjs';
+import { readSlot, clearSlot } from '../hooks/lib/slot.mjs';
+import { composeStatusLine } from '../hooks/lib/statusline-render.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
 const err = (s = '') => process.stderr.write(`${s}\n`);
@@ -89,6 +99,12 @@ usage: prmpt <command> [options]
   wallet export [--json]     Print the Solana secret key. Only to back it up --
                              prefer 'wallet mnemonic', which covers both chains.
   wallet path                Where the key files live.
+
+  statusline install         Also show the matched ad on the host's status line,
+                             above the prompt, until it ages out. Opt-in: it
+                             edits ~/.claude/settings.json and ~/.codex/config.toml,
+                             chaining any status line you already had.
+                             Also: uninstall, status, preview.
 
   update [--check]           Update this install to the latest GitHub release.
                              --check reports without changing anything;
@@ -581,6 +597,87 @@ async function cmdUpdate(args) {
   say('  Restart your agent to pick it up.');
 }
 
+
+// --- statusline -------------------------------------------------------------
+
+/**
+ * The status line is a second surface for an ad the plugin has ALREADY matched.
+ * The turn hook parks its decision; the host re-renders it above the prompt
+ * until it ages out. No extra request, no extra latency, and the copy on screen
+ * still belongs to the turn the user is looking at.
+ *
+ * Opt-in rather than installed by default: it edits the user's own Claude Code
+ * and Codex config, and a plugin that rewrites those uninvited is a plugin
+ * nobody should install.
+ */
+async function cmdStatusline(args) {
+  const sub = args[0] || 'status';
+  const only = args.includes('--claude') ? ['claude']
+    : args.includes('--codex') ? ['codex']
+    : null;
+
+  const wanted = only || detectHosts();
+
+  if (sub === 'install') {
+    if (!wanted.length) {
+      throw new UserError(
+        'no supported host found.\n' +
+        "  Looked for ~/.claude and ~/.codex. Pass --claude or --codex to write one anyway.",
+      );
+    }
+    for (const host of wanted) {
+      const r = host === 'claude' ? installClaude() : installCodex();
+      out(`prmpt: status line installed for ${host === 'claude' ? 'Claude Code' : 'Codex'}`);
+      out(`  ${r.path}`);
+      if (r.chained) out('  your existing status line is kept and rendered above it');
+    }
+    out('');
+    out('Restart your agent to pick it up. Nothing shows until the next turn');
+    out('that actually matches an ad -- the status line renders that decision,');
+    out('it does not fetch one of its own.');
+    return;
+  }
+
+  if (sub === 'uninstall' || sub === 'remove') {
+    for (const host of wanted.length ? wanted : ['claude', 'codex']) {
+      const r = host === 'claude' ? uninstallClaude() : uninstallCodex();
+      if (!r.changed) {
+        out(`prmpt: nothing of ours in ${r.path}`);
+        continue;
+      }
+      out(`prmpt: status line removed from ${r.path}`);
+      if (r.restored) out('  your original status line was put back');
+    }
+    clearSlot();
+    return;
+  }
+
+  if (sub === 'preview') {
+    const ad = readSlot({});
+    if (!ad) {
+      out('prmpt: nothing parked -- no ad has matched recently.');
+      return;
+    }
+    out(composeStatusLine({ ad, mode: 'card', columns: process.stdout.columns || 80 }));
+    return;
+  }
+
+  if (sub === 'status') {
+    for (const s of statusAll()) {
+      const state = s.installed ? 'installed' : s.present ? 'not installed' : 'host not found';
+      out(`${s.host.padEnd(12)} ${state}`);
+      out(`  ${s.path}`);
+      if (s.installed && s.chained) out('  chaining your previous status line');
+    }
+    const ad = readSlot({});
+    out('');
+    out(ad ? `parked ad: ${ad.headline}` : 'parked ad: (none)');
+    return;
+  }
+
+  throw new UserError(`unknown statusline command: ${sub}\n  try 'prmpt help'`);
+}
+
 // --- dispatch ---------------------------------------------------------------
 
 export async function run(argv) {
@@ -595,6 +692,7 @@ export async function run(argv) {
     case 'web':        return cmdDashboard(args);
     case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
+    case 'statusline': return cmdStatusline(args);
     case 'help':
     case '-h':
     case '--help':     out(HELP); return;
