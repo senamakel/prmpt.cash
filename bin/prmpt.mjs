@@ -36,6 +36,15 @@ import { currentVersion, pluginRoot } from '../hooks/lib/version.mjs';
 import { planUpdate, applyUpdate, updateBlocker } from '../hooks/lib/update.mjs';
 import { RELEASE_REPO } from '../hooks/lib/release.mjs';
 import { createWebSession, evmChallenge, linkEvmWallet } from '../hooks/lib/api.mjs';
+import {
+  installClaude,
+  uninstallClaude,
+  statusAll,
+  detectHosts,
+  CLAUDE_TRADE_OFF,
+} from '../hooks/lib/statusline-install.mjs';
+import { readSlot, clearSlot } from '../hooks/lib/slot.mjs';
+import { composeStatusLine } from '../hooks/lib/statusline-render.mjs';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
 const err = (s = '') => process.stderr.write(`${s}\n`);
@@ -93,6 +102,13 @@ usage: prmpt <command> [options]
   wallet export [--json]     Print the Solana secret key. Only to back it up --
                              prefer 'wallet mnemonic', which covers both chains.
   wallet path                Where the key files live.
+
+  statusline install         Also show the matched ad on Claude Code's status
+                             line, above the prompt, until it ages out. Opt-in:
+                             it edits ~/.claude/settings.json, chaining any
+                             status line you already had. Note that Claude Code
+                             hides its footer key hints while one is set.
+                             Also: uninstall, status, preview.
 
   update [--check]           Update this install to the latest GitHub release.
                              --check reports without changing anything;
@@ -668,6 +684,82 @@ async function cmdUpdate(args) {
   say('  Restart your agent to pick it up.');
 }
 
+
+// --- statusline -------------------------------------------------------------
+
+/**
+ * The status line is a second surface for an ad the plugin has ALREADY matched.
+ * The turn hook parks its decision; the host re-renders it above the prompt
+ * until it ages out. No extra request, no extra latency, and the copy on screen
+ * still belongs to the turn the user is looking at.
+ *
+ * Opt-in rather than installed by default: it edits the user's own Claude Code
+ * and Codex config, and a plugin that rewrites those uninvited is a plugin
+ * nobody should install.
+ */
+async function cmdStatusline(args) {
+  const sub = args[0] || 'status';
+
+  if (sub === 'install') {
+    if (!detectHosts().length && !args.includes('--force')) {
+      throw new UserError(
+        'Claude Code not found on this machine.\n' +
+        "  Looked for ~/.claude. Pass --force to write the setting anyway.",
+      );
+    }
+    for (const line of CLAUDE_TRADE_OFF) out(`  ${line}`);
+    out('');
+    const r = installClaude();
+    out(`prmpt: status line installed -- ${r.path}`);
+    if (r.chained) out('  your existing status line is kept and rendered above it');
+    out('');
+    out('Restart Claude Code to pick it up. Nothing shows until a turn actually');
+    out('matches an ad: the status line renders that decision, it never fetches one.');
+    return;
+  }
+
+  if (sub === 'uninstall' || sub === 'remove') {
+    const r = uninstallClaude();
+    if (!r.changed) {
+      out(`prmpt: nothing of ours in ${r.path}`);
+    } else {
+      out(`prmpt: status line removed from ${r.path}`);
+      if (r.restored) out('  your original status line was put back');
+    }
+    clearSlot();
+    return;
+  }
+
+  if (sub === 'preview') {
+    const ad = readSlot({});
+    if (!ad) {
+      out('prmpt: nothing parked -- no ad has matched recently.');
+      return;
+    }
+    out(composeStatusLine({ ad, mode: 'card', columns: process.stdout.columns || 80 }));
+    return;
+  }
+
+  if (sub === 'status') {
+    for (const s of statusAll()) {
+      if (!s.supported) {
+        out(`${s.host.padEnd(12)} not available -- ${s.reason}`);
+        if (s.note) out(`  ${s.note}`);
+        continue;
+      }
+      out(`${s.host.padEnd(12)} ${s.installed ? 'installed' : s.present ? 'not installed' : 'host not found'}`);
+      out(`  ${s.path}`);
+      if (s.installed && s.chained) out('  chaining your previous status line');
+    }
+    const ad = readSlot({});
+    out('');
+    out(ad ? `parked ad: ${ad.headline}` : 'parked ad: (none)');
+    return;
+  }
+
+  throw new UserError(`unknown statusline command: ${sub}\n  try 'prmpt help'`);
+}
+
 // --- dispatch ---------------------------------------------------------------
 
 export async function run(argv) {
@@ -683,6 +775,7 @@ export async function run(argv) {
     case 'onboard':    return cmdOnboard(args);
     case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
+    case 'statusline': return cmdStatusline(args);
     case 'help':
     case '-h':
     case '--help':     out(HELP); return;

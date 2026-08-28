@@ -56,6 +56,8 @@ ${B}prmpt.cash installer${R}
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
   --project            Configure ./ (this project) instead of your home directory
+  --editor             Also install the VS Code / Cursor extension, if one of
+                       them is on your PATH (--no-editor to skip the offer)
   --uninstall          Remove the hooks and the installed copy
   -h, --help           This text
 
@@ -84,6 +86,8 @@ while [ $# -gt 0 ]; do
     --version=*) VERSION="${1#*=}"; shift ;;
     --agents)    AGENTS="${2:-}"; shift 2 ;;
     --agents=*)  AGENTS="${1#*=}"; shift ;;
+    --editor)    EDITOR_EXT=1; shift ;;
+    --no-editor) EDITOR_EXT=0; shift ;;
     --endpoint)  ENDPOINT="${2:-}"; shift 2 ;;
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
@@ -411,6 +415,55 @@ if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || 
     CONFIGURED=$((CONFIGURED+1))
   fi
 else skip "Amp not found"; fi
+
+# ------------------------------------------------------------ editor extension
+# The extension is a DISPLAY for what the hook already matched -- it is what
+# gives Cursor somewhere to put an ad at all, since a Cursor hook can read a
+# turn but has nowhere to show the result. Offered, never forced: it is a
+# separate artifact with its own uninstall, and an installer that silently adds
+# things to somebody's editor is not one people should pipe into sh.
+install_editor_ext() {
+  _bin="$1"; _name="$2"
+
+  # A checkout or an unpacked release may carry the built vsix beside it; a
+  # normal install downloads it from the same release as the tarball, so the
+  # two can never be from different versions.
+  _vsix=""
+  for _cand in "$INSTALL_DIR"/vscode/prmpt-vscode-*.vsix "$INSTALL_DIR"/vscode/*.vsix; do
+    [ -f "$_cand" ] && { _vsix="$_cand"; break; }
+  done
+
+  if [ -z "$_vsix" ]; then
+    _ver=$(node -p "require('$INSTALL_DIR/package.json').version" 2>/dev/null) || return 1
+    [ -n "$_ver" ] || return 1
+    _tmp=$(mktemp -d)
+    _vsix="$_tmp/prmpt-vscode-$_ver.vsix"
+    _url="https://github.com/$REPO_SLUG/releases/download/v$_ver/prmpt-vscode-$_ver.vsix"
+    curl -fsSL "$_url" -o "$_vsix" 2>/dev/null || { rm -rf "$_tmp"; return 1; }
+  fi
+
+  if "$_bin" --install-extension "$_vsix" --force >/dev/null 2>&1; then
+    ok "$_name extension installed  ${D}(reload the window)${R}"
+    return 0
+  fi
+  return 1
+}
+
+offer_editor_ext() {
+  _bin="$1"; _name="$2"
+  command -v "$_bin" >/dev/null 2>&1 || return 0
+  if [ "${EDITOR_EXT:-}" = "1" ]; then
+    install_editor_ext "$_bin" "$_name" \
+      || warn "$_name found but the extension could not be installed."
+  else
+    skip "$_name found -- re-run with --editor to add the sidebar card"
+  fi
+}
+
+if [ "${EDITOR_EXT:-}" != "0" ]; then
+  offer_editor_ext cursor Cursor
+  offer_editor_ext code "VS Code"
+fi
 
 # ----------------------------------------------------------------------- done
 say ""
