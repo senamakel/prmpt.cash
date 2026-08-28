@@ -1,7 +1,7 @@
 {
   "name": "prmpt",
   "version": "0.3.0",
-  "description": "End-of-reply sponsored-line hook for coding agents. Earn free crypto when someone clicks: USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
+  "description": "Get paid to use Claude Code, Codex, Gemini CLI, Amp and Cursor. A zero-dependency hook that earns you 70% of every sponsored line it shows, in USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "repository": {
