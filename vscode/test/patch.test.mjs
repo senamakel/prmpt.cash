@@ -13,14 +13,14 @@
 import assert from 'node:assert/strict';
 import { test, before } from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prmpt-vsc-test-'));
+const outDir = path.join(root, 'test', '.compiled');
+fs.mkdirSync(outDir, { recursive: true });
 
 let patchText;
 let chatInject;
@@ -35,6 +35,7 @@ before(async () => {
       format: 'esm',
       platform: 'node',
       outfile: path.join(outDir, `${name}.mjs`),
+      sourcemap: 'inline',
       logLevel: 'silent',
     });
   }

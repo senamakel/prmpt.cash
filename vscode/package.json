@@ -80,6 +80,7 @@
     "build": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "test": "node --test test/*.test.mjs",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=80 test/*.test.mjs",
     "test:e2e:ui": "node --test test/ui.e2e.mjs",
     "package": "npm run build && vsce package --no-dependencies",
     "vscode:prepublish": "npm run build"
