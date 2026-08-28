@@ -172,6 +172,12 @@ Deliberately a different file from the key: config.json is rewritten by every
 code path that touches settings, and it is the file people paste into bug
 reports. The key stays out of both blast radii.
 
+The status-line surface keeps two more files there, neither of them secret:
+`statusline.json`, holding the status-line command the installer displaced so it
+can be run and later handed back, and `slot-<session>.json` plus `pending.jsonl`,
+which are one pending decision and the list of ads that have actually been drawn
+and not yet reported. All 0600.
+
 The token is never echoed, never logged, and never appears in hook output. It
 travels only in the `Authorization: Bearer` header of the serve request.
 
@@ -278,6 +284,12 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
   about as long as an exit.
 - **Neither is updating.** The daily update check costs the turn a `stat()` and
   a `spawn()`. The download happens in a detached child, or not at all.
+- **`UserPromptSubmit` blocks you**, so it does no network work at all: it
+  derives keywords, hands them to a detached child and exits. Measured at well
+  under a tenth of a second.
+- **The status-line command never touches the network.** It reads one small file
+  and prints one line. If your own status-line command is slow, it is given a
+  two-second budget and then whatever it produced is used.
 - Nothing is installed but the plugin itself. No dependencies to audit.
 
 Turn it off without uninstalling:
@@ -288,12 +300,35 @@ export PRMPT_DISABLED=1
 
 ## What is sent
 
-The agent's **final message for that turn**, plus a session id, an install id
-derived from your machine, and the agent name. That is what the match runs
-against.
+**At the end of a turn:** the agent's **final message for that turn**, plus a
+session id, an install id derived from your machine, and the agent name. That is
+what the match runs against.
 
-Not sent: your prompts, your code, your file contents, your repo name, your IP
-(the server derives a coarse country at request time and discards the address).
+**For the status line:** there is no reply yet — the ad renders while the model
+is still working — so the match runs against a handful of keywords derived from
+your prompt **on your machine**, by
+[`hooks/lib/tokens.mjs`](hooks/lib/tokens.mjs). What is transmitted is that list
+and nothing else.
+
+Read that file if this matters to you; it is forty lines. Before anything is
+split into words it removes, whole: fenced code blocks, inline code spans, URLs,
+filesystem paths (POSIX and Windows) and email addresses. What is left is
+lowercased, stripped of stopwords, de-duplicated, filtered of anything that
+looks like a hash or a credential, capped at 32 words — and **sorted
+alphabetically**, so word order, the last thing that makes a set of words into
+prose, is gone before the request is built. `fix the nightingale acquisition
+timeout` leaves as `["acquisition", "fix", "nightingale", "timeout"]`.
+
+**Not sent: your prompts**, your code, your file contents, your repo name, your
+IP (the server derives a coarse country at request time and discards the
+address). The status-line surface sends derived keywords; it does not send the
+text you typed, and there is a test that asserts a phrase from the prompt is
+nowhere in the request body.
+
+That is a real reduction, not anonymity: individual words you typed do leave the
+machine. If that is not a trade you want, `PRMPT_DISABLED=1` turns everything
+off, and removing the `UserPromptSubmit` entry from `~/.claude/settings.json`
+turns off only this surface, leaving the end-of-turn line working.
 
 See [`.env.example`](.env.example) for every knob.
 
@@ -302,6 +337,8 @@ See [`.env.example`](.env.example) for every knob.
 | Agent | Event | Config |
 |---|---|---|
 | Claude Code | `Stop` | `~/.claude/settings.json`, timeout in **seconds** |
+| Claude Code | `UserPromptSubmit` | same file — fetches the status-line slot |
+| Claude Code | `statusLine` | same file — renders it. Wraps an existing command |
 | Codex | `Stop` | `~/.codex/hooks.json`, timeout in **seconds** |
 | Gemini CLI | `AfterAgent` | `~/.gemini/settings.json`, timeout in **milliseconds** |
 | Amp | `agent.end` | a TypeScript plugin, not a hook. See [`amp/`](amp/README.md) |
