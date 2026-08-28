@@ -608,6 +608,13 @@ want() {
   case ",$AGENTS," in *",$1,"*) return 0 ;; *) return 1 ;; esac
 }
 
+# Why a host was passed over. With an explicit list -- from --agents or from the
+# picker -- "not found" would be a lie about a host that is sitting right there
+# and was simply not asked for.
+passed_over() {
+  if [ -n "$AGENTS" ]; then skip "$2 not selected"; else skip "$2 not found"; fi
+}
+
 if [ "$SCOPE" = "project" ]; then
   CLAUDE_CFG="./.claude/settings.json"; CODEX_CFG="./.codex/hooks.json"
   GEMINI_CFG="./.gemini/settings.json"; AMP_DIR="./.amp/plugins"
@@ -652,7 +659,7 @@ if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected clau
       skip "status line not installed -- see below to turn it on"
     fi
   fi
-else skip "Claude Code not found"; fi
+else passed_over claude "Claude Code"; fi
 
 # Codex -- Stop, timeout in seconds. Same event name as Claude Code; the hook
 # tells them apart by CLAUDECODE=1 at runtime.
@@ -660,14 +667,14 @@ if { [ -n "$AGENTS" ] && want codex; } || { [ -z "$AGENTS" ] && { detected codex
   if merge_hook "$CODEX_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Codex        $CODEX_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
-else skip "Codex not found"; fi
+else passed_over codex "Codex"; fi
 
 # Gemini CLI -- AfterAgent, timeout in MILLISECONDS, and it wants a matcher.
 if { [ -n "$AGENTS" ] && want gemini; } || { [ -z "$AGENTS" ] && { detected gemini || [ -d "$HOME/.gemini" ]; }; }; then
   if merge_hook "$GEMINI_CFG" "AfterAgent" 5000 "*" "$HOOK"; then
     ok "Gemini CLI   $GEMINI_CFG  ${D}(AfterAgent, ms)${R}"; CONFIGURED=$((CONFIGURED+1))
   fi
-else skip "Gemini CLI not found"; fi
+else passed_over gemini "Gemini CLI"; fi
 
 # Amp -- a TypeScript plugin, not a hook. Unverified against a live install.
 if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || [ -d "$HOME/.config/amp" ]; }; }; then
@@ -676,7 +683,7 @@ if { [ -n "$AGENTS" ] && want amp; } || { [ -z "$AGENTS" ] && { detected amp || 
     ok "Amp          $AMP_DIR/prmpt.ts  ${D}(agent.end, unverified)${R}"
     CONFIGURED=$((CONFIGURED+1))
   fi
-else skip "Amp not found"; fi
+else passed_over amp "Amp"; fi
 
 # ------------------------------------------------------------ editor extension
 # The extension is a DISPLAY for what the hook already matched -- it is what
