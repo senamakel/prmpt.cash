@@ -133,7 +133,12 @@ jobs:
           $child = "`$env:PATH = '$machine;$userPath'; " +
                    "if (-not (Get-Command prmpt -ErrorAction SilentlyContinue)) { exit 9 }; " +
                    "prmpt --help"
-          $out = pwsh -NoProfile -Command $child
+          # pwsh -Command returns output as a string ARRAY, one element per
+          # line. -match/-notmatch on an array filter element-wise and
+          # return the (possibly non-empty, thus truthy) filtered array, not
+          # a boolean -- so an unjoined $out would throw here even on a
+          # match, because most lines don't contain the needle. Join first.
+          $out = (pwsh -NoProfile -Command $child) -join "`n"
           if ($LASTEXITCODE -eq 9) { throw 'prmpt did not resolve from the user PATH' }
           if ($LASTEXITCODE -ne 0) { throw "prmpt did not run: $out" }
           if ($out -notmatch 'usage: prmpt') { throw "unexpected output: $out" }
