@@ -96,16 +96,43 @@ test('Claude Code accepts the plugin manifest', { skip: !CLAUDE && 'claude not i
   assert.equal(res.code, 0, `claude plugin validate --strict failed:\n${res.stdout}\n${res.stderr}`);
 });
 
-test('the plugin manifest and the installer agree on the hook', () => {
+test('the plugin manifest and the installer agree on every hook', () => {
   // The manifest route (claude plugin install) and the installer route both
-  // have to end at the same event with the same timeout. They are written in
+  // have to end at the same events with the same timeouts. They are written in
   // two different files and have drifted before.
   const manifest = readJSON(path.join(PLUGIN_DIR, 'hooks', 'hooks.json'));
   const claude = HOSTS.find((h) => h.agent === 'claude');
-  const entries = manifest.hooks[claude.event].flatMap((g) => g.hooks);
-  assert.equal(entries.length, 1);
-  assert.equal(entries[0].timeout, claude.timeout);
-  assert.ok(entries[0].command.includes('turn-end.mjs'));
+
+  for (const { event, timeout, hook } of [
+    { event: claude.event, timeout: claude.timeout, hook: claude.hook },
+    ...claude.extraEvents,
+  ]) {
+    const groups = manifest.hooks[event];
+    assert.ok(Array.isArray(groups), `hooks.json declares no ${event}`);
+    const entries = groups.flatMap((g) => g.hooks);
+    assert.equal(entries.length, 1, `hooks.json: expected one entry under ${event}`);
+    assert.equal(entries[0].timeout, timeout, `hooks.json: wrong ${event} timeout`);
+    assert.ok(entries[0].command.includes(hook), `hooks.json: ${event} does not run ${hook}`);
+  }
+
+  assert.deepEqual(
+    Object.keys(manifest.hooks).sort(),
+    [claude.event, ...claude.extraEvents.map((e) => e.event)].sort(),
+    'hooks.json and the installer declare different events',
+  );
+});
+
+test('the plugin manifest cannot carry the status line, and says so', () => {
+  // A Claude Code plugin declares hooks and nothing else -- statusLine is a
+  // settings key, not a hook -- so the /plugin install route gets the
+  // end-of-turn line and the fetch hook but no footer. Better to state that
+  // here than to have somebody discover it as a missing feature.
+  const manifest = readJSON(path.join(PLUGIN_DIR, 'hooks', 'hooks.json'));
+  assert.equal(manifest.statusLine, undefined);
+  assert.ok(
+    /statusLine/.test(fs.readFileSync(path.join(PLUGIN_DIR, 'README.md'), 'utf8')),
+    'README.md must explain that the status line needs the installer',
+  );
 });
 
 test('autodetection wires up exactly the agents that are installed', async () => {

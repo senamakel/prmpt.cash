@@ -399,6 +399,13 @@ test('both installers embed the same JSON-merge program, character for character
     normalise(fromSh('Removing prmpt')),
     'the uninstall programs have drifted',
   );
+  // The status-line program is the third one, and the one with the most to
+  // lose: it is what stands between a user and losing the footer they wrote.
+  assert.equal(
+    normalise(fromPs('StatusJs')),
+    normalise(fromSh('merge_statusline()')),
+    'the status-line programs have drifted',
+  );
 });
 
 test('a config that is not valid JSON is left completely alone', async () => {
