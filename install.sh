@@ -335,7 +335,7 @@ fi
 #   Gemini CLI   AfterAgent  ~/.gemini/settings.json    timeout MILLISECONDS
 #   Amp          agent.end   a TypeScript plugin file, not a hook at all
 merge_hook() {
-  file="$1"; event="$2"; timeout="$3"; matcher="$4"
+  file="$1"; event="$2"; timeout="$3"; matcher="$4"; hookpath="$5"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   # Values reach the program through the ENVIRONMENT, never argv. install.ps1
@@ -344,7 +344,7 @@ merge_hook() {
   # every later argument shifted by one and the hook path went missing. The
   # environment preserves an empty value and needs no quoting on either side.
   PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
-  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$HOOK" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$hookpath" \
   "$NODE_BIN" -e '
     const fs=require("fs");
     const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
@@ -364,9 +364,13 @@ merge_hook() {
     j.hooks = j.hooks || {};
     const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
     // Drop any previous entry of ours so re-running cannot stack duplicates.
+    // Keyed on the script being installed rather than on one hard-coded name:
+    // there are two hooks now, on two different events, and a filter naming
+    // only the first would stack a duplicate of the second on every run.
+    const name = hook.split(/[\\/]/).pop();
     for (const g of groups) {
       if (Array.isArray(g.hooks)) {
-        g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes("turn-end.mjs")));
+        g.hooks = g.hooks.filter(h => !(typeof h?.command === "string" && h.command.includes(name)));
       }
     }
     // Quoted, because the install dir routinely contains a space: macOS puts
@@ -376,6 +380,45 @@ merge_hook() {
     if (matcher) entry.name = "prmpt";
     const group = matcher ? { matcher, hooks:[entry] } : { hooks:[entry] };
     j.hooks[event] = groups.filter(g => Array.isArray(g.hooks) ? g.hooks.length>0 : true).concat([group]);
+    fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
+  '
+}
+
+# The status line is a Claude Code surface and only Claude Code has one. It is
+# NOT a hook: it is a settings key holding a command, so it gets its own merge.
+#
+# The rule that matters here is that we WRAP rather than replace. Most people
+# who will install this already have a status line they built, and silently
+# taking it away over an ad plugin is the fastest way to be uninstalled.
+merge_statusline() {
+  file="$1"; hookpath="$2"
+  mkdir -p "$(dirname "$file")"
+  [ -f "$file" ] || printf '{}\n' > "$file"
+  # Through the environment, never argv -- same reason as merge_hook.
+  PRMPT_CFG="$file" PRMPT_HOOK="$hookpath" PRMPT_STATE="$STATE_FILE" \
+  "$NODE_BIN" -e '
+    const fs=require("fs"), path=require("path");
+    const p=process.env.PRMPT_CFG, hook=process.env.PRMPT_HOOK, state=process.env.PRMPT_STATE;
+    let j={};
+    const raw = fs.existsSync(p) ? fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"").trim() : "";
+    if (raw) {
+      try { j=JSON.parse(raw); }
+      catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
+    }
+    if (raw) fs.copyFileSync(p, p+".bak");
+    const prev = (j.statusLine && typeof j.statusLine === "object") ? j.statusLine : {};
+    const prevCmd = typeof prev.command === "string" ? prev.command : "";
+    // Record theirs so our renderer can run it and uninstall can hand it back.
+    // Never record OUR OWN command: a re-install would otherwise make every
+    // render fork a fresh copy of the renderer, forever.
+    if (prevCmd && !prevCmd.includes("status-line.mjs")) {
+      fs.mkdirSync(path.dirname(state), { recursive:true, mode:0o700 });
+      fs.writeFileSync(state, JSON.stringify({ wrapped: prevCmd }, null, 2)+"\n", { mode:0o600 });
+      fs.chmodSync(state, 0o600);
+    }
+    // Their other statusLine keys (padding and friends) are display preferences
+    // and are kept; only the command becomes ours.
+    j.statusLine = { ...prev, type:"command", command:`node ${JSON.stringify(hook)}` };
     fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n");
   '
 }
