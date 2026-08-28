@@ -20,7 +20,7 @@ export function chatInjectScript(portBase: number = PORT_BASE): string {
   return `(function(){
 try{
   if(window.__PRMPT__)return; window.__PRMPT__=1;
-  var PORTS=[]; for(var i=0;i<${PORT_SPAN};i++)PORTS.push(${'$'}{${portBase}}+i);
+  var PORTS=[]; for(var i=0;i<${PORT_SPAN};i++)PORTS.push(${portBase}+i);
   var AD=null, PORT=null;
 
   function fetchSlot(cb){
@@ -95,12 +95,10 @@ try{
     card.appendChild(label);card.appendChild(head);card.appendChild(body);
     wrap.appendChild(card);
     card.addEventListener('click',function(){
-      // Opened through the extension host so the click is attributed exactly
-      // like every other surface, and so the renderer never opens a URL itself.
-      if(AD&&AD.clickUrl&&PORT!==null){
-        fetch('http://127.0.0.1:'+PORT+'/slot').catch(function(){});
-        try{window.open(AD.clickUrl,'_blank');}catch(e){}
-      }
+      // Ask the extension host to open it. The renderer never opens a URL
+      // itself: window.open inside Electron is unreliable and would bypass
+      // vscode.env.openExternal, which is what the other surfaces use.
+      if(PORT!==null)fetch('http://127.0.0.1:'+PORT+'/open',{cache:'no-store'}).catch(function(){});
     });
     wrap.__head=head;wrap.__body=body;
     return wrap;

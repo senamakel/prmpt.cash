@@ -30,6 +30,9 @@ export class Bridge {
   private server?: http.Server;
   private port = 0;
 
+  /** Called when the chat card is clicked, so the host opens the URL. */
+  constructor(private readonly onOpen: () => void) {}
+
   async start(preferred: number): Promise<number> {
     const base = Number.isFinite(preferred) && preferred > 0 ? preferred : DEFAULT_PORT;
     for (let i = 0; i < PORT_SPAN; i++) {
@@ -48,7 +51,20 @@ export class Bridge {
   private listen(port: number): Promise<number> {
     return new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => {
-        if (req.method !== 'GET' || !req.url || !req.url.startsWith('/slot')) {
+        if (req.method !== 'GET' || !req.url) {
+          res.writeHead(404).end();
+          return;
+        }
+        if (req.url.startsWith('/open')) {
+          // The renderer never opens URLs itself -- it asks for this, and the
+          // host opens the parked ad with openExternal, exactly as the sidebar
+          // and status bar do. So the renderer never learns a URL it could
+          // navigate to on its own, and every surface attributes identically.
+          this.onOpen();
+          res.writeHead(204).end();
+          return;
+        }
+        if (!req.url.startsWith('/slot')) {
           res.writeHead(404).end();
           return;
         }
@@ -59,11 +75,12 @@ export class Bridge {
           // The renderer's origin is a vscode-file:// URL, which is opaque.
           'access-control-allow-origin': '*',
         });
+        // Deliberately no clickUrl: the renderer asks /open instead, so a URL
+        // never crosses into a context that could navigate to it unprompted.
         res.end(JSON.stringify(ad ? {
           requestId: ad.requestId,
           headline: ad.headline,
           body: ad.body,
-          clickUrl: ad.clickUrl,
         } : null));
       });
       server.once('error', reject);
