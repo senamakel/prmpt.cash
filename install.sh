@@ -793,7 +793,10 @@ else
   say "  ${D}Connect a GitHub or X account to lift the daily earnings cap, and"
   say "  pick which token you are paid in.${R}"
   say ""
-  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" onboard; then
+  # No terminal means nobody is sitting here to see a browser window, and an
+  # unattended install must not pop one. The link is printed either way.
+  if [ -t 1 ]; then _onboard_open=""; else _onboard_open="--no-open"; fi
+  if PRMPT_ENDPOINT="$ENDPOINT" "$NODE_BIN" "$CLI" onboard $_onboard_open; then
     :
   else
     warn "could not open the setup page. Run it yourself when you are ready:"
