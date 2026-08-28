@@ -17,6 +17,7 @@ import process from 'node:process';
 import { loadConfig, detectRepo } from './lib/config.mjs';
 import { serveAd } from './lib/api.mjs';
 import { enrolInBackground } from './lib/enrol.mjs';
+import { flushImpressionsInBackground } from './lib/background.mjs';
 import { linkEvmInBackground } from './lib/link-evm.mjs';
 import { autoUpdateInBackground } from './lib/autoupdate.mjs';
 
@@ -265,6 +266,14 @@ function main() {
     // does NOT block this turn: serving continues below either way. Worst case
     // the address is linked a turn later than it might have been.
     linkEvmInBackground(config);
+
+    // Tell the backend about anything the Claude Code status line has drawn but
+    // not yet reported. Deliberately BEFORE the turn-text checks below: most
+    // turns are too short to serve, and an impression that is owed to the user
+    // must not wait for one that happens to match. Gated on the pending log
+    // being non-empty, so the turns that have nothing to report -- almost all
+    // of them -- pay a stat() and nothing else.
+    flushImpressionsInBackground();
 
     // Some hosts hand us the text directly; Claude Code's Stop payload does
     // not, so fall back to the transcript it points at.
