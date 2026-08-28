@@ -8,6 +8,11 @@ match you get one clearly-labelled line. If someone clicks it, **70% of the clea
 price lands in your wallet**, usually within a second, in whichever token you
 picked.
 
+In Claude Code there is a second place it can appear: a short segment appended to
+your **status line**, the footer that renders while the model is working. It is
+appended to the status line you already have, never in place of it, and it is
+capped at 60 characters. See [Two places an ad can appear](#two-places-an-ad-can-appear).
+
 You never had to sell anything, watch anything or click anything. Advertisers are
 paying for the moment a real problem is on your screen, and this is your share of it.
 
@@ -207,6 +212,35 @@ Being honest about what that does and does not guarantee:
 - **A git checkout is never touched.** If you are developing the plugin, update
   it with git; the auto-updater refuses outright and does not even check.
 
+## Two places an ad can appear
+
+| Surface | When | Where | Hosts |
+|---|---|---|---|
+| End of turn | once, when the reply finishes | its own labelled block | Claude Code, Codex, Gemini CLI, Amp |
+| Status line | while the model is working | one segment appended to your footer | **Claude Code only** |
+
+**The status line is Claude Code only, on purpose.** Codex and Gemini CLI have no
+equivalent footer, and inventing config for them would wire up something that
+could never display anything. Cursor and Windsurf are absent for the same
+reason they always were.
+
+**It wraps the status line you already have.** If `statusLine` in
+`~/.claude/settings.json` already points at a command, the installer records it
+and ours runs it, keeps its output, and appends a segment after it. Your command
+is handed the same JSON on stdin that Claude Code would have given it. If there
+is not enough room left on the line, yours wins and nothing of ours is drawn.
+`--uninstall` gives your original command back.
+
+Two consequences worth knowing:
+
+- The renderer **makes no network call, ever.** Claude Code re-runs a status-line
+  command continuously and watches it for slowness. The decision is fetched by a
+  detached child at the start of the turn and left in a small file; the renderer
+  reads that file and prints one line.
+- The `/plugin install` route wires the hooks but **not** the status line.
+  `statusLine` is a settings key rather than a hook, and a Claude Code plugin can
+  only declare hooks, so the footer needs `install.sh` or `install.ps1`.
+
 ## What it looks like
 
 ```
@@ -214,6 +248,16 @@ Sponsored · Stop re-running flaky tests until green
 Quarantine detects flaky tests from your CI history and isolates them
 https://prmpt.cash/7q
 ```
+
+and, in the status line, appended to whatever you already had:
+
+```
+my-repo (main) Opus | 41% left  Sponsored · Quarantine flaky tests
+```
+
+The click URL is attached as a terminal hyperlink rather than printed, so the
+line stays short; it is clickable in iTerm2, Kitty and WezTerm and is plain text
+everywhere else.
 
 The headline is rewritten for *your* turn, not boilerplate. The link is our own
 redirect: it records the click, pays you in your chosen token, and 302s to the
