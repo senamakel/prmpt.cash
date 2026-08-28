@@ -54,6 +54,10 @@ So the four files that matter are short, and they are the ones to read:
 | [`hooks/statusline.mjs`](hooks/statusline.mjs) | that the status-line renderer makes no network call, ever |
 | [`install.sh`](install.sh) | every file it touches, in one POSIX shell script |
 
+The licence backs that up rather than just inviting you to look: it is
+GPL-3.0-or-later, so anything built on this client stays open on the same terms and
+a shipped fork cannot quietly close the part you were meant to be able to audit.
+
 The backend is not open — the auction, pricing and payout code is the product. The
 client is, because the client is the part that sits inside your editor. Where the
 two disagree about what we claim, the client is checkable and this README tries to
