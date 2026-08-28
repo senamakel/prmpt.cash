@@ -31,6 +31,11 @@ UNINSTALL=0
 NO_LOGIN=0
 SCOPE="user"
 INSTALL_DIR=""
+BIN_DIR=""
+LINK_CLI=1
+# Set once the `prmpt` shim is on PATH, so the closing notes can print the short
+# command instead of `node <install-dir>/bin/prmpt.mjs`.
+CLI_CMD=""
 
 # ---------------------------------------------------------------- presentation
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -55,6 +60,8 @@ ${B}prmpt.cash installer${R}
   --agents <list>      Comma-separated: claude,codex,gemini,amp. Default: autodetect
   --endpoint <url>     API endpoint. Default: $DEFAULT_ENDPOINT
   --dir <path>         Where to install. Default: \$XDG_DATA_HOME/prmpt
+  --bin-dir <path>     Where to put the \`prmpt\` command. Default: \$HOME/.local/bin
+  --no-path            Do not install the \`prmpt\` command onto your PATH
   --project            Configure ./ (this project) instead of your home directory
   --editor             Also install the VS Code / Cursor extension, if one of
                        them is on your PATH (--no-editor to skip the offer)
@@ -73,13 +80,13 @@ wallet holding ad revenue, so back it up with 'prmpt wallet export'.
 To use an existing wallet, install first and then import its seed phrase or
 private key locally:
 
-                    <install-dir>/bin/prmpt.mjs wallet import -
+                    prmpt wallet import -
 
 One other route is available:
 
   --no-login      install now, decide later:
-                    <install-dir>/bin/prmpt.mjs login
-                    <install-dir>/bin/prmpt.mjs wallet import <secret-key>
+                    prmpt login
+                    prmpt wallet import <secret-key>
 USAGE
 }
 
@@ -98,6 +105,9 @@ while [ $# -gt 0 ]; do
     --endpoint=*) ENDPOINT="${1#*=}"; shift ;;
     --dir)       INSTALL_DIR="${2:-}"; shift 2 ;;
     --dir=*)     INSTALL_DIR="${1#*=}"; shift ;;
+    --bin-dir)   BIN_DIR="${2:-}"; shift 2 ;;
+    --bin-dir=*) BIN_DIR="${1#*=}"; shift ;;
+    --no-path)   LINK_CLI=0; shift ;;
     --project)   SCOPE="project"; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help)   usage; exit 0 ;;
