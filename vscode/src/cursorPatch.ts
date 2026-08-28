@@ -32,9 +32,6 @@ import * as vscode from 'vscode';
 import { chatInjectScript } from './chatInject';
 import {
   ANY_MARKER,
-  MARKER,
-  HOOK,
-  HOOKED,
   strip,
   canHook,
   buildPatched,
