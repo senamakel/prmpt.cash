@@ -1,7 +1,14 @@
 # prmpt for VS Code and Cursor
 
 Shows the sponsored line [prmpt](https://prmpt.cash) matched for your last agent
-turn, and pays you 70% of the click price.
+turn, so you get paid for coding you were doing anyway — 70% of the clearing price
+for the ad being shown, and 70% again if you click it.
+
+This extension is a **third place** the same decision can appear, alongside the
+[two surfaces the CLI plugin drives](../README.md#the-two-surfaces-in-detail): the
+end-of-turn line in every host, and Claude Code's status line. All three read one
+parked decision, and an impression is claimed exactly once no matter how many of
+them are on screen.
 
 This extension is a **display**. It holds no key, makes no network call to our
 backend, and decides nothing. The [prmpt CLI plugin](../README.md) hooks the end
