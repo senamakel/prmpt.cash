@@ -620,7 +620,7 @@ async function cmdStatusline(args) {
         "  Looked for ~/.claude. Pass --force to write the setting anyway.",
       );
     }
-    for (const line of CLAUDE_TRADE_OFF) say(`  ${line}`);
+    for (const line of CLAUDE_TRADE_OFF) out(`  ${line}`);
     out('');
     const r = installClaude();
     out(`prmpt: status line installed -- ${r.path}`);
