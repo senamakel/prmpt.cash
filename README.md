@@ -84,7 +84,7 @@ git clone https://github.com/senamakel/prmpt.cash
 <summary>Options</summary>
 
 ```
--y, --yes            skip the picker and take the autodetected defaults
+-y, --yes            skip the picker and wire up every host that is present
 --no-login           install and wire up the agents, but create no wallet
 --no-onboard         do not open the setup page in a browser at the end
 --version <tag>      install a specific release, e.g. v0.2.0 (default: latest)
@@ -99,17 +99,23 @@ git clone https://github.com/senamakel/prmpt.cash
 </details>
 
 On a terminal, the installer asks where it should install itself before it
-touches anything — every host it found is pre-ticked, the status line and the
-editor extensions are not, and you toggle by number:
+touches anything. Everything is ticked — Enter installs the lot, including
+hosts you have not installed yet, which are wired up so they work the day you
+do. Untick by number:
 
 ```
   [x] 1. Claude Code   Stop -- the line at the end of a turn
-  [ ] 2.   status line the same ad above your prompt while it thinks
+  [x] 2.   status line the same ad above your prompt while it thinks
   [x] 3. Codex         Stop -- the line at the end of a turn
-  [ ] 4. Gemini CLI    AfterAgent -- the line at the end of a turn  (not found)
+  [x] 4. Gemini CLI    AfterAgent -- the line at the end of a turn  (not found)
   ...
   Number to toggle, a all, n none, Enter to install, q to quit:
 ```
+
+The one row worth a second look is the status line: Claude Code hides most of
+its footer key hints, `esc to interrupt` among them, whenever a custom status
+line is set. That is Claude Code's behaviour, not prmpt's — untick 2 to keep
+them.
 
 It reads `/dev/tty`, not stdin, so it works under `curl ... | sh` where stdin is
 the script itself. Pass `--agents` or `-y` and it never appears — a Dockerfile,
