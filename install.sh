@@ -513,6 +513,11 @@ say ""
 say "  Restart your agent, then just work. Most turns match nothing and print"
 say "  nothing. On a match you get one labelled line; a click pays 70% of the"
 say "  clearing price to your wallet in USDC."
+if [ -f "$STATE_FILE" ]; then
+  say ""
+  say "  ${D}Your status line still runs; ours is appended after it, and"
+  say "  --uninstall gives yours back exactly as it was.${R}"
+fi
 say ""
 say "  ${D}Turn it off:${R}  export PRMPT_DISABLED=1"
 if [ -f "$INSTALL_DIR/install.sh" ]; then
