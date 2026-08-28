@@ -1,11 +1,11 @@
 # prmpt.cash
 
-**Get paid for the coding-agent turns you already run.**
+**Earn free crypto for the replies your coding agent already writes.**
 
-When your agent finishes a reply, this hook asks whether any advertiser genuinely
-matches what you just did. Almost always the answer is no and nothing prints. On a
-match you get one clearly-labelled line. If someone clicks it, **70% of the clearing
-price lands in your wallet**, usually within a second, in whichever token you
+When your agent finishes a reply, this hook asks whether any advertiser actually
+matches what you just did. Almost always the answer is no and nothing prints. Once
+in a while it is yes, and you get one clearly-labelled line. **Click it and you get
+paid**, straight to your wallet, usually within a second, in whichever token you
 picked.
 
 You never had to sell anything, watch anything or click anything. Advertisers are
@@ -13,12 +13,12 @@ paying for the moment a real problem is on your screen, and this is your share o
 
 | Token   | Chain  | What it is                                                  |
 | ------- | ------ | ----------------------------------------------------------- |
-| `TINY`  | Solana | Tiny Humans. The one most people take: stacked passively out of ad revenue, at no cost to you |
-| `cbBTC` | Base   | Bitcoin, one to one                                         |
+| `TINY`  | Solana | Tiny Humans. The most memeable mascot on the list, with an active community behind it |
+| `BTC`   | Base   | Bitcoin, one to one. Coinbase Wrapped BTC (`cbBTC`) on chain |
 | `ETH`   | Base   | Native ether                                                |
 | `SOL`   | Solana | Native lamports, no token account in the way                |
-| `USDC`  | Base   | A dollar that stays a dollar. The default                   |
-| `XAUt0` | Solana | Tether Gold, if you would rather your terminal habit bought bullion |
+| `USDC`  | Base   | A dollar that stays a dollar. The default, and the stable answer |
+| `XAUT`  | Solana | Tether Gold, if you would rather your terminal habit bought bullion. `XAUt0` on chain |
 
 Pick one at <https://prmpt.cash/earnings>. The balance is kept in dollars and
 converted only when a payout settles, at the price right then, so switching changes
@@ -106,7 +106,7 @@ proven the same way with Sign-In With Ethereum and linked to the same account.
 First sign-in is signup, so nothing has to exist beforehand.
 
 Which address gets paid follows from the token you choose: ERC-20s settle on
-Base, and SOL, TINY and XAUt0 on Solana. You choose on the dashboard.
+Base, and SOL, TINY and XAUT on Solana. You choose on the dashboard.
 
 ```sh
 prmpt login                     # create a wallet if there isn't one, and sign in
@@ -215,11 +215,11 @@ Quarantine detects flaky tests from your CI history and isolates them
 https://prmpt.cash/7q
 ```
 
-The headline is rewritten for *your* turn, not boilerplate. The link is our own
+The headline is rewritten for *your* reply, not boilerplate. The link is our own
 redirect: it records the click, pays you in your chosen token, and 302s to the
 advertiser. Every payout is a real on-chain transaction, listed with its
 signature at <https://prmpt.cash/earnings> and counted on the public
-[transparency page](https://prmpt.cash/transparency).
+[analytics page](https://prmpt.cash/analytics).
 
 ## The status line (opt-in)
 
@@ -260,7 +260,7 @@ This is the part worth checking yourself, in [`hooks/turn-end.mjs`](hooks/turn-e
 - **One request, hard 1.5s budget, fail-open.** On any error, timeout, non-match
   or missing key it prints nothing and exits 0.
 - Gemini CLI runs hooks *synchronously inside the agent loop*, so a slow hook
-  would stall your turn. That is exactly why the budget exists.
+  would stall your agent. That is exactly why the budget exists.
 - **Signing in is never on the turn's clock.** Self-enrolment detaches a child
   and returns immediately; the turn that triggers it serves nothing and takes
   about as long as an exit.
