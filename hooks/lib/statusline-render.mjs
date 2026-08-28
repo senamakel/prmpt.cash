@@ -17,8 +17,12 @@
 //     is therefore printed as visible text whenever the row is wide enough to
 //     hold it, and the arrow is kept only as the narrow-terminal fallback.
 //
-// Everything stays honest about what it is: the word "Sponsored" leads, and
-// nothing is dressed up to look like output from the agent.
+// The status line carries no "Sponsored" label. It is the one surface whose
+// reader is always the person who installed the plugin and is being paid for
+// the row, so the label restated what they already knew and cost characters the
+// ad copy needed. The END-OF-TURN block is the opposite case -- it scrolls into
+// a transcript that gets pasted and shared -- and it keeps its label. Do not
+// "make these consistent" by deleting that one too.
 
 const ESC = '\x1b';
 const RESET = `${ESC}[0m`;
@@ -72,7 +76,6 @@ function oneLine(s, max) {
 /** The ad line the surface is sold against: at most this many visible chars. */
 export const AD_LINE_MAX = 60;
 
-const LABEL = 'Sponsored';
 const SEP = ' · ';
 const OPEN = '↗';
 
@@ -84,7 +87,7 @@ const MIN_TEXT = 20;
 /**
  * The status-line rendering: one dim, clickable line.
  *
- *   Sponsored · Ship faster with Foo — 2ms cold starts · https://prmpt.cash/G
+ *   Ship faster with Foo — 2ms cold starts · https://prmpt.cash/G
  *
  * `columns` is the terminal width. The line is budgeted against it so it never
  * wraps: a wrapped status line pushes the prompt down by a row on every redraw,
@@ -95,9 +98,6 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
 
   const url = safeUrl(ad.clickUrl) ? ad.clickUrl : '';
 
-  // "Sponsored · " -- the label and its separator, ahead of any ad copy.
-  const overhead = LABEL.length + SEP.length;
-
   // The tail is the click affordance. Printing the URL is preferred: a status
   // line drawn by a host TUI usually loses the OSC 8 wrapper, and then the bare
   // arrow is the only thing left pointing at a destination the reader cannot
@@ -106,7 +106,7 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
   const urlTail = url ? `${SEP}${url}` : '';
   const arrowTail = ` ${OPEN}`;
   let tail = urlTail || arrowTail;
-  if (columns - overhead - tail.length - SLACK < MIN_TEXT) tail = arrowTail;
+  if (columns - tail.length - SLACK < MIN_TEXT) tail = arrowTail;
 
   // Two independent ceilings, and the tighter one wins.
   //
@@ -120,7 +120,7 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
   // The tail is reserved OUTSIDE that contract rather than taken out of it: the
   // URL is the affordance, not ad copy, so charging it to the advertiser's 60
   // characters would shrink what was bought every time the link got longer.
-  const fit = Math.max(MIN_TEXT, columns - overhead - tail.length - SLACK);
+  const fit = Math.max(MIN_TEXT, columns - tail.length - SLACK);
   const budget = Math.min(AD_LINE_MAX, fit);
 
   let text = oneLine(plainText(ad.headline), budget);
@@ -129,7 +129,7 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
     if (room >= 24) text = `${text} — ${oneLine(plainText(ad.body), room)}`;
   }
 
-  return hyperlink(url, dim(`${LABEL}${SEP}${text}${tail}`));
+  return hyperlink(url, dim(`${text}${tail}`));
 }
 
 /**
