@@ -20,7 +20,45 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      # Scoped to test/ deliberately. A bare `node --test` walks the tree
+      # recursively and would pull in vscode/test/, which imports esbuild --
+      # a devDependency this job does not install, and should not have to. The
+      # editor extension has its own job below.
       - run: node --test test/*.test.mjs
+
+  vscode:
+    name: editor extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # A single version, not the matrix above: this package is only ever
+          # run by the editor's own Node, so testing the plugin's supported
+          # floor against it proves nothing.
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - name: install
+        working-directory: vscode
+        run: npm ci
+      # esbuild strips types without checking them, so nothing in the build or
+      # the test run would catch a type error on its own.
+      - name: typecheck
+        working-directory: vscode
+        run: npx tsc --noEmit
+      # The load-bearing assertion in here is that the script injected into
+      # Cursor's workbench.js parses. A syntax error in it lands inside
+      # Cursor's startup path, and the symptom is an editor that will not open.
+      - name: test
+        working-directory: vscode
+        run: npm test
+      # Packaging is how this reaches anybody, and it fails on problems the
+      # tests cannot see -- a missing icon, a bad manifest field. release.yml
+      # does this too, but only once a tag is already cut.
+      - name: package
+        working-directory: vscode
+        run: npx vsce package --no-dependencies --out /tmp/prmpt-vscode-ci.vsix
 
   lint:
     name: shell lint
