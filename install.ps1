@@ -7,8 +7,10 @@
 
     1. checks Node >= 18            (the hook is plain ESM, no dependencies)
     2. copies the plugin to a stable directory
-    3. creates a wallet and signs in with it
-    4. wires up every agent it finds, using that agent's own documented hook
+    3. asks where to install itself, on a console; -Yes or -Agents skips it
+    4. creates a wallet and signs in with it
+    5. wires up every agent it chose, using that agent's own documented hook
+    6. opens the setup page on the web, signed in (-NoOnboard skips it)
 
   Idempotent: run it again to upgrade, re-point, or add an agent. Existing
   config files are backed up before they are touched, and our own hook entry is
@@ -34,6 +36,8 @@ param(
   [string] $Dir      = $env:PRMPT_DIR,
   [switch] $Project,
   [switch] $StatusLine,
+  [switch] $NoOnboard,
+  [switch] $Yes,
   [switch] $Uninstall
 )
 
@@ -43,6 +47,8 @@ $ErrorActionPreference = 'Stop'
 # easily pass a switch. Without it the installer signs in against the default
 # endpoint -- production -- and creates a real user behind a throwaway wallet.
 if ($env:PRMPT_NO_LOGIN -eq '1') { $NoLogin = [switch]$true }
+if ($env:PRMPT_NO_ONBOARD -eq '1') { $NoOnboard = [switch]$true }
+if ($env:PRMPT_YES -eq '1') { $Yes = [switch]$true }
 
 $RepoUrl         = 'https://github.com/senamakel/prmpt.cash.git'
 $RepoSlug        = 'senamakel/prmpt.cash'
@@ -61,6 +67,8 @@ function Write-Ok   { param($m) Write-Host "  + $m" -ForegroundColor Green }
 function Write-Skip { param($m) Write-Host "  - $m" -ForegroundColor DarkGray }
 function Write-Warn { param($m) Write-Host "  ! $m" -ForegroundColor Yellow }
 function Die        { param($m) Write-Host "error: $m" -ForegroundColor Red; exit 1 }
+# Three steps, and it says so -- see install.sh.
+function Write-Step { param($n, $t) Write-Host ''; Write-Host "[$n/3] $t" -ForegroundColor White; Write-Host '' }
 
 # ---------------------------------------------------------------- prerequisites
 $node = Get-Command node -ErrorAction SilentlyContinue
@@ -260,10 +268,110 @@ if ($Uninstall) {
   exit 0
 }
 
-# ------------------------------------------------------------------ get source
-Write-Host 'prmpt.cash' -ForegroundColor White
+# --------------------------------------------------------------------- step 1
+# What is about to be installed, before any of it is -- see install.sh.
 Write-Host ''
+Write-Host 'prmpt.cash  an ad engine for coding agents' -ForegroundColor White
 
+Write-Step 1 'What this is'
+Write-Host '  One labelled sponsored line at the end of a turn, and you are paid for'
+Write-Host '  it. Most turns match nothing and print nothing at all.'
+Write-Host ''
+Write-Host '  What leaves this machine  the final text of a finished turn, to be'
+Write-Host '  matched against live campaigns. Not your prompts, not your code, not your'
+Write-Host '  files. The status-line surface sends keywords derived locally instead.'
+Write-Host ''
+Write-Host '  What it costs you  one request with a hard 1.5 second budget that fails'
+Write-Host '  open and silent. A slow or missing backend is something your agent never'
+Write-Host '  sees. There are no dependencies to audit -- it is plain Node ESM.'
+Write-Host ''
+Write-Host '  What you earn  70% of the clearing price on every impression and every'
+Write-Host '  click, paid to a wallet created on this machine in step 2. USDC, cbBTC or'
+Write-Host '  ETH on Base; SOL, TINY or ANT on Solana -- you choose which in step 3.'
+Write-Host ''
+Write-Host '  Off at any time  $env:PRMPT_DISABLED = 1, or -Uninstall to remove it.'
+
+# ------------------------------------------------------------------- selection
+# The same picker install.sh draws, and under the same rule: it runs ONLY when
+# nothing already decided the answer and there is a console to read a key from.
+# -Agents, -Yes, PRMPT_YES=1 or a non-interactive host all take the old path.
+function Test-HostPresent {
+  param([string] $Name)
+  switch ($Name) {
+    'claude'     { return [bool](Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.claude')) }
+    'statusline' { return (Test-HostPresent 'claude') }
+    'codex'      { return [bool](Get-Command codex  -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.codex')) }
+    'gemini'     { return [bool](Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $Home_ '.gemini')) }
+    'amp'        { return [bool](Get-Command amp    -ErrorAction SilentlyContinue) -or (Test-Path $AmpDir) }
+  }
+  return $false
+}
+
+# Interactive means: a console we can read a line from, and a user who did not
+# already say what they wanted. Host.UI.RawUI is absent under a non-interactive
+# runspace, which is what makes this safe in CI.
+$interactive = (-not $Yes) -and (-not $Agents) -and $Host.UI -and $Host.UI.RawUI -and -not [Console]::IsInputRedirected
+
+Write-Step 2 'Choose where it goes'
+
+if ($interactive) {
+  $rows = @(
+    @{ Key='claude';     Label='Claude Code   Stop -- the line at the end of a turn' },
+    @{ Key='statusline'; Label='  status line the same ad above your prompt while it thinks' },
+    @{ Key='codex';      Label='Codex         Stop -- the line at the end of a turn' },
+    @{ Key='gemini';     Label='Gemini CLI    AfterAgent -- the line at the end of a turn' },
+    @{ Key='amp';        Label='Amp           agent.end -- unverified against a live install' }
+  )
+  # Everything starts ticked, including hosts that are not installed yet:
+  # pressing Enter is the whole install, and a host wired before it exists
+  # simply works the day it arrives. Detection decides the "(not found)" note,
+  # not the box. The status line is ticked too, with its cost spelled out under
+  # the list, so it can be unticked before it happens rather than after.
+  $picked = @{}
+  foreach ($r in $rows) { $picked[$r.Key] = $true }
+
+  while ($true) {
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+      $r = $rows[$i]
+      $box = if ($picked[$r.Key]) { '[x]' } else { '[ ]' }
+      $note = if (Test-HostPresent $r.Key) { '' } else { '  (not found)' }
+      Write-Host ("  {0} {1}. {2}{3}" -f $box, ($i + 1), $r.Label, $note)
+    }
+    Write-Host ''
+    Write-Host '  A host that is not there yet is still wired up, so it works the day you' -ForegroundColor DarkGray
+    Write-Host '  install it. A status line hides most of Claude Code''s footer key hints,' -ForegroundColor DarkGray
+    Write-Host '  including "esc to interrupt" -- that is Claude Code behaviour, not prmpt''s.' -ForegroundColor DarkGray
+    Write-Host '  Untick 2 to keep them.' -ForegroundColor DarkGray
+    Write-Host ''
+    $reply = Read-Host '  Number to toggle, a all, n none, Enter to install, q to quit'
+    $reply = ($reply -replace ',', ' ').Trim()
+    Write-Host ''
+    if ($reply -eq '' -or $reply -match '^(y|yes)$') { break }
+    if ($reply -match '^(q|quit)$') { Write-Host ''; Write-Host '  nothing was installed.'; exit 0 }
+    if ($reply -match '^(a|all)$')  { foreach ($r in $rows) { $picked[$r.Key] = $true };  continue }
+    if ($reply -match '^(n|none)$') { foreach ($r in $rows) { $picked[$r.Key] = $false }; continue }
+    foreach ($tok in ($reply -split '\s+')) {
+      if ($tok -notmatch '^[0-9]+$') { Write-Warn "not a number: $tok"; continue }
+      $n = [int] $tok
+      if ($n -lt 1 -or $n -gt $rows.Count) { Write-Warn "no such option: $tok"; continue }
+      $k = $rows[$n - 1].Key
+      $picked[$k] = -not $picked[$k]
+    }
+  }
+
+  # The status line is drawn by Claude Code and wired up as part of wiring it.
+  # Asking for it alone could only ever do nothing, so it selects the host too.
+  if ($picked['statusline'] -and -not $picked['claude']) {
+    $picked['claude'] = $true
+    Write-Warn 'the status line is drawn by Claude Code -- selecting Claude Code too.'
+  }
+
+  $Agents = (@('claude','codex','gemini','amp') | Where-Object { $picked[$_] }) -join ','
+  $StatusLine = [switch] $picked['statusline']
+  if (-not $Agents) { Die 'nothing selected -- nothing was installed.' }
+}
+
+# ------------------------------------------------------------------ get source
 $selfDir = if ($PSScriptRoot) { $PSScriptRoot } else { '' }
 if ($selfDir -and (Test-Path (Join-Path $selfDir 'hooks\turn-end.mjs'))) {
   if ($selfDir -ne $Dir) {
@@ -387,7 +495,10 @@ if (Test-Path $cfgFile) {
   # the agents still get wired up, and the hook retries in the background.
   Write-Host 'Creating a wallet and signing in' -ForegroundColor White
   $env:PRMPT_ENDPOINT = $Endpoint
-  & $NodeBin $Cli login
+  # --no-onboard: the setup link is minted at the END of this run instead. It
+  # is single-use and lives two minutes -- dead long before the user has read
+  # past the agent wiring that still has to happen.
+  & $NodeBin $Cli login --no-onboard
   if ($LASTEXITCODE -ne 0) {
     Write-Warn 'sign-in failed -- the agents are still being wired up.'
     Write-Warn 'the hook retries in the background, or run it yourself:'
@@ -500,17 +611,7 @@ if ($Endpoint -ne $DefaultEndpoint) {
   Write-Host "note endpoint is $Endpoint -- set `$env:PRMPT_ENDPOINT to match." -ForegroundColor Yellow
 }
 
-Write-Host "Done. $configured agent(s) configured." -ForegroundColor White
-Write-Host ''
-Write-Host '  Restart your agent, then just work. Most turns match nothing and print'
-Write-Host '  nothing. On a match you get one labelled line; a click pays 70% of the'
-Write-Host '  clearing price to your wallet in USDC.'
-Write-Host ''
-# Mirrors install.sh: the link printed by the login above expires in two
-# minutes, so the durable instruction is the command.
-Write-Host "  Finish setup: node $Cli onboard"
-Write-Host '                Connect a GitHub or X account to lift the daily earnings'
-Write-Host '                cap, and pick which token you are paid in.'
+Write-Host "  Installed. $configured agent(s) wired up. Restart yours and just work." -ForegroundColor Green
 Write-Host ''
 if (-not $StatusLine) {
   # Mirrors install.sh: the trade-off is the reason this is off, and somebody
@@ -525,5 +626,28 @@ if (-not $StatusLine) {
   Write-Host "                (or re-run this installer with -StatusLine)"
   Write-Host ''
 }
+# Mirrors install.sh: finishing setup on the web is part of installing, not a
+# second command to remember. It runs here, last, because the code is single-use
+# and expires in two minutes. Best effort -- the token is already on disk and
+# the hooks are already wired, so a failed round trip must not fail the install.
+Write-Step 3 'Finish setting up'
+Write-Host '  The rest is on the web, where it can have a real interface: pick which'
+Write-Host '  token you are paid in, and connect a GitHub or X account to lift the'
+Write-Host '  daily earnings cap. Your keys never leave this machine -- the browser'
+Write-Host '  gets a single-use code, not the wallet.'
+Write-Host ''
+if ($NoOnboard -or -not (Test-Path $cfgFile)) {
+  Write-Host "  Open it with:  node $Cli onboard"
+} else {
+  $env:PRMPT_ENDPOINT = $Endpoint
+  # No console means nobody is here to see a browser window; the link is
+  # printed either way.
+  if ($interactive) { & $NodeBin $Cli onboard } else { & $NodeBin $Cli onboard --no-open }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn 'could not open the setup page. Run it yourself when you are ready:'
+    Write-Warn "  node $Cli onboard"
+  }
+}
+Write-Host ''
 Write-Host "  Turn it off:  `$env:PRMPT_DISABLED = '1'"
 Write-Host "  Remove it:    $Dir\install.ps1 -Uninstall"
