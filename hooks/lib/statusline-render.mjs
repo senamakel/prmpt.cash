@@ -10,10 +10,12 @@
 //     So the default here is ONE line, dim, and never the three-line block.
 //     A persistent ad that takes a quarter of the terminal is the kind of thing
 //     that gets a plugin uninstalled.
-//   - It cannot print a URL usefully. A raw click URL on a permanent line is
-//     noise, and the user cannot select it without disturbing the prompt. So
-//     the line is wrapped in an OSC 8 hyperlink instead: modern terminals make
-//     the whole thing clickable, and ones that do not simply show the text.
+//   - It cannot rely on the hyperlink alone. The line is wrapped in an OSC 8
+//     hyperlink, but plenty of hosts render a status line through their own TUI
+//     and drop the escape on the way -- Claude Code's footer among them -- so
+//     the affordance arrives as a bare arrow pointing at nothing. The click URL
+//     is therefore printed as visible text whenever the row is wide enough to
+//     hold it, and the arrow is kept only as the narrow-terminal fallback.
 //
 // Everything stays honest about what it is: the word "Sponsored" leads, and
 // nothing is dressed up to look like output from the agent.
@@ -71,12 +73,18 @@ function oneLine(s, max) {
 export const AD_LINE_MAX = 60;
 
 const LABEL = 'Sponsored';
+const SEP = ' · ';
 const OPEN = '↗';
+
+/** Columns of slack so a line exactly the terminal width does not wrap. */
+const SLACK = 2;
+/** Below this much room for copy the ad is not worth selling, so the URL goes. */
+const MIN_TEXT = 20;
 
 /**
  * The status-line rendering: one dim, clickable line.
  *
- *   Sponsored · Ship faster with Foo — 2ms cold starts ↗
+ *   Sponsored · Ship faster with Foo — 2ms cold starts · https://prmpt.cash/G
  *
  * `columns` is the terminal width. The line is budgeted against it so it never
  * wraps: a wrapped status line pushes the prompt down by a row on every redraw,
@@ -85,9 +93,21 @@ const OPEN = '↗';
 export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
   const dim = (s) => (color ? `${DIM}${s}${RESET}` : s);
 
-  // Reserve: the label, its separator, the trailing affordance, and a couple of
-  // columns of slack so a status line that is exactly the terminal width does
-  // not wrap on terminals that count the last cell differently.
+  const url = safeUrl(ad.clickUrl) ? ad.clickUrl : '';
+
+  // "Sponsored · " -- the label and its separator, ahead of any ad copy.
+  const overhead = LABEL.length + SEP.length;
+
+  // The tail is the click affordance. Printing the URL is preferred: a status
+  // line drawn by a host TUI usually loses the OSC 8 wrapper, and then the bare
+  // arrow is the only thing left pointing at a destination the reader cannot
+  // see. The arrow is the fallback for rows too narrow to hold both the URL and
+  // enough copy to be worth selling.
+  const urlTail = url ? `${SEP}${url}` : '';
+  const arrowTail = ` ${OPEN}`;
+  let tail = urlTail || arrowTail;
+  if (columns - overhead - tail.length - SLACK < MIN_TEXT) tail = arrowTail;
+
   // Two independent ceilings, and the tighter one wins.
   //
   //   columns  -- so the line never wraps (a wrapped status line pushes the
@@ -96,7 +116,11 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
   //               advertiser buys a short line; a wide terminal must not turn
   //               that into a banner, and it must leave room for whatever the
   //               user's own chained status line already puts on the row.
-  const fit = Math.max(20, columns - LABEL.length - OPEN.length - 6);
+  //
+  // The tail is reserved OUTSIDE that contract rather than taken out of it: the
+  // URL is the affordance, not ad copy, so charging it to the advertiser's 60
+  // characters would shrink what was bought every time the link got longer.
+  const fit = Math.max(MIN_TEXT, columns - overhead - tail.length - SLACK);
   const budget = Math.min(AD_LINE_MAX, fit);
 
   let text = oneLine(plainText(ad.headline), budget);
@@ -105,7 +129,7 @@ export function renderSlotLine(ad, { columns = 80, color = true } = {}) {
     if (room >= 24) text = `${text} — ${oneLine(plainText(ad.body), room)}`;
   }
 
-  return hyperlink(ad.clickUrl, dim(`${LABEL} · ${text} ${OPEN}`));
+  return hyperlink(url, dim(`${LABEL}${SEP}${text}${tail}`));
 }
 
 /**
