@@ -269,7 +269,7 @@ if ($Uninstall) {
     $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
     $entries  = @(($userPath -split ';') | Where-Object { $_ })
     $kept     = @($entries | Where-Object { $_.TrimEnd('\') -ne $BinDir.TrimEnd('\') })
-    if ($kept.Count -ne $entries.Count) {
+    if ($kept.Count -ne $entries.Count -and $env:PRMPT_NO_PATH_PERSIST -ne '1') {
       [Environment]::SetEnvironmentVariable('PATH', ($kept -join ';'), 'User')
       Write-Ok "removed $BinDir from your user PATH"
     }
@@ -433,9 +433,17 @@ if ($NoPath) {
     $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
     $entries  = @(($userPath -split ';') | Where-Object { $_ })
     if ($entries -notcontains $BinDir) {
-      [Environment]::SetEnvironmentVariable('PATH', (($entries + $BinDir) -join ';'), 'User')
-      Write-Ok "added $BinDir to your user PATH"
-      Write-Warn 'open a new terminal for prmpt to resolve there.'
+      # PRMPT_NO_PATH_PERSIST=1 keeps the registry write out of it. That write is
+      # the one piece of MACHINE state this installer creates -- it outlives the
+      # sandbox HOME a test hands us, so a smoke run that made it would append a
+      # dead directory to the developer's real user PATH, once per run, forever.
+      if ($env:PRMPT_NO_PATH_PERSIST -eq '1') {
+        Write-Skip 'not writing the user PATH (PRMPT_NO_PATH_PERSIST=1)'
+      } else {
+        [Environment]::SetEnvironmentVariable('PATH', (($entries + $BinDir) -join ';'), 'User')
+        Write-Ok "added $BinDir to your user PATH"
+        Write-Warn 'open a new terminal for prmpt to resolve there.'
+      }
     }
     # This process too, so the login below and everything printed after it are
     # true in the shell the user is standing in.
