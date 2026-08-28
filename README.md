@@ -1,6 +1,16 @@
 # prmpt.cash
 
-**Your coding agent already writes the replies. This gets you paid for them.**
+**Get paid to use Claude Code.**
+
+Not for clicking anything. Not for writing about us. For the coding you were going
+to do anyway: install this, keep working, and your agent starts earning. It works
+the same in Codex, Gemini CLI, Amp and Cursor.
+
+The way that happens is advertising, and we would rather say so in the first
+paragraph than four screens down. An advertiser pays to reach a developer at the
+moment a real problem is on screen; **70% of what they pay goes to you**, and it is
+paid for the ad being *shown*. Clicking pays you again, but you never have to. There
+is nothing to watch, nothing to post, and nothing to sign up for.
 
 One plugin, two places an ad can appear, and both of them earn:
 
@@ -12,12 +22,13 @@ One plugin, two places an ad can appear, and both of them earn:
 | Matched on | the agent's final message | keywords derived from your prompt, on your machine |
 | | **on by default** | **opt-in — `prmpt statusline install`** |
 
-You get **70% of what the advertiser pays**, for the ad being *shown* and again if
-you *click* it, straight to your own wallet, in whichever token you picked. You
-never had to sell anything, watch anything or sign up for anything. Advertisers are
-paying for the moment a real problem is on your screen, and this is your share of it.
+Earnings go straight to a wallet on your own machine, in whichever token you picked
+— USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana. The installer creates
+that wallet for you, so there is no account and no key to paste.
 
-Most turns match nothing and print nothing. That is the point.
+It stays quiet. Most turns match nothing and print nothing, one line is the entire
+end-of-turn footprint, and nothing about your session slows down: one request, a
+hard 1.5s budget, and silence on anything that misses it.
 
 ```sh
 curl -fsSL https://prmpt.cash/install.sh | sh
