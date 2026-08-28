@@ -52,6 +52,26 @@ jobs:
       - run: node --test test/*.test.mjs
       - run: sh -n install.sh
 
+      # The extension ships as its own asset, so it gets its own gate. The test
+      # that matters here is that the script injected into Cursor's workbench.js
+      # parses -- a syntax error in it leaves somebody unable to open Cursor.
+      - name: build and test the editor extension
+        working-directory: vscode
+        run: |
+          set -eu
+          # The extension's version is the plugin's: they are released together
+          # and the README points from one to the other, so a drift would have
+          # somebody install a card that cannot read the slot format beside it.
+          PKG=$(node -p 'require("../package.json").version')
+          EXT=$(node -p 'require("./package.json").version')
+          if [ "$PKG" != "$EXT" ]; then
+            echo "::error::plugin is $PKG but vscode/package.json says $EXT"
+            exit 1
+          fi
+          npm install --no-audit --no-fund
+          npm test
+          npx vsce package --no-dependencies --out "../prmpt-vscode-${{ steps.v.outputs.version }}.vsix"
+
       - name: build the tarball
         run: |
           set -eu
@@ -74,7 +94,10 @@ jobs:
           # No wrapping directory: the updater accepts either, but a flat
           # archive is what `tar xzf - -C <dir>` wants for an in-place install.
           tar czf "prmpt-$VERSION.tar.gz" -C "$STAGE" .
-          sha256sum "prmpt-$VERSION.tar.gz" > SHA256SUMS
+          # Both assets in one SHA256SUMS: `prmpt update` reads the tarball's
+          # line and the editor installer reads the vsix's, and a single file
+          # means neither can be published without the other being covered.
+          sha256sum "prmpt-$VERSION.tar.gz" "prmpt-vscode-$VERSION.vsix" > SHA256SUMS
           cat SHA256SUMS
 
       - name: verify the tarball installs and runs
@@ -98,11 +121,13 @@ jobs:
           VERSION="${{ steps.v.outputs.version }}"
           # Re-runnable: workflow_dispatch on an existing tag replaces the
           # assets rather than failing.
+          ASSETS="prmpt-$VERSION.tar.gz prmpt-vscode-$VERSION.vsix SHA256SUMS"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "prmpt-$VERSION.tar.gz" SHA256SUMS --clobber
+            # shellcheck disable=SC2086
+            gh release upload "$TAG" $ASSETS --clobber
           else
-            gh release create "$TAG" "prmpt-$VERSION.tar.gz" SHA256SUMS \
-              --title "$TAG" --generate-notes
+            # shellcheck disable=SC2086
+            gh release create "$TAG" $ASSETS --title "$TAG" --generate-notes
           fi
 
       # The one path CI cannot otherwise reach. The `installer` job in ci.yml
