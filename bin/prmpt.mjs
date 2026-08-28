@@ -119,8 +119,8 @@ ${RELEASE_REPO} for a newer release and, if there is one, verifies its
 checksum and swaps this directory for it. Your token and wallet key live in
 ~/.config/prmpt and are never touched by that.
 
-One seed phrase holds both chains: a Solana address (SOL, TINY, XAUt0) and a
-Base address (USDC, cbBTC, ETH). Which one is paid follows from the token you
+One seed phrase holds both chains: a Solana address (SOL, TINY, XAUT) and a
+Base address (USDC, BTC, ETH). Which one is paid follows from the token you
 choose on the dashboard.
 
 It is a hot wallet: a cleartext key at mode 0600 under your home directory. It
@@ -171,14 +171,14 @@ async function cmdLogin(args) {
   // default token is not one of them.
   if (!result.evmLinked) {
     err(`prmpt: warning -- could not link the Base address: ${result.evmError}`);
-    err('  Solana payouts (SOL, TINY, XAUt0) still work. ERC-20 earnings will');
+    err('  Solana payouts (SOL, TINY, XAUT) still work. ERC-20 earnings will');
     err("  accrue but cannot be sent until this succeeds. Re-run 'prmpt login'.");
     err('');
   }
 
-  out('Clicks on ads served from this install now pay 70% of the clearing price');
-  out('to your wallet, in whichever token you choose. Set PRMPT_DISABLED=1 to');
-  out('stop serving.');
+  out('Clicks on ads served from this install now pay you, straight to your');
+  out('wallet, in whichever token you choose. Set PRMPT_DISABLED=1 to stop');
+  out('serving.');
   out('');
   out('The token cannot be revoked from here or anywhere else -- it is valid until');
   out('it expires. Treat the config file as a credential.');
