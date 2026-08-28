@@ -166,3 +166,96 @@ test('install.sh under Git Bash and install.ps1 agree on what they write', { ski
     );
   }
 });
+
+// ---------------------------------------------------------------- the command
+//
+// install.ps1's half of the PATH shim. It is a second implementation of what
+// install.sh does -- a .cmd rather than a shell script, and a registry write
+// rather than a line in a shell rc -- so it gets its own coverage rather than
+// being assumed from the POSIX side.
+//
+// Nothing here asserts the registry write itself: smokeEnv sets
+// PRMPT_NO_PATH_PERSIST=1 precisely so these runs cannot leave a dead directory
+// on the machine's user PATH. What is asserted is the part a wrong PATH entry
+// could not save anyway -- that the file exists, runs, and belongs to us.
+
+/** Where install.ps1 puts the shim for a sandbox HOME. */
+function shimPath(box) {
+  return path.join(box.home, '.local', 'bin', 'prmpt.cmd');
+}
+
+test('install.ps1 leaves a runnable prmpt.cmd behind', { skip }, async () => {
+  const box = sandbox();
+  const res = await installPs1(box, ['-Agents', 'claude', '-Dir', box.dir]);
+  assert.equal(res.code, 0, `${res.stdout}\n${res.stderr}`);
+
+  const shim = shimPath(box);
+  assert.ok(fs.existsSync(shim), `no shim at ${shim}: ${res.stdout}${res.stderr}`);
+
+  // Run it the way cmd.exe would, which is the whole point of a .cmd: no node,
+  // no install directory, just the name.
+  const out = await runRecorded(`"${shim}" --help`, { env: smokeEnv(box.home) });
+  assert.equal(out.code, 0, `${out.stdout}${out.stderr}`);
+  assert.match(out.stdout, /usage: prmpt/, out.stdout);
+});
+
+test('-NoPath installs the hooks and no command', { skip }, async () => {
+  const box = sandbox();
+  const res = await installPs1(box, ['-Agents', 'claude', '-Dir', box.dir, '-NoPath']);
+  assert.equal(res.code, 0, res.stderr);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'a shim was written despite -NoPath');
+  assert.match(res.stdout, /prmpt\.mjs onboard/, res.stdout);
+});
+
+test('-BinDir decides where the command goes', { skip }, async () => {
+  const box = sandbox();
+  const binDir = path.join(box.home, 'elsewhere');
+  const res = await installPs1(box, ['-Agents', 'claude', '-Dir', box.dir, '-BinDir', binDir]);
+  assert.equal(res.code, 0, res.stderr);
+  assert.ok(fs.existsSync(path.join(binDir, 'prmpt.cmd')), `${res.stdout}${res.stderr}`);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'wrote to the default directory too');
+});
+
+test("somebody else's prmpt.cmd is neither overwritten nor uninstalled", { skip }, async () => {
+  const box = sandbox();
+  const shim = shimPath(box);
+  fs.mkdirSync(path.dirname(shim), { recursive: true });
+  fs.writeFileSync(shim, '@echo off\r\necho not ours\r\n');
+
+  const res = await installPs1(box, ['-Agents', 'claude', '-Dir', box.dir]);
+  assert.equal(res.code, 0, res.stderr);
+  assert.match(fs.readFileSync(shim, 'utf8'), /not ours/, 'a foreign prmpt.cmd was overwritten');
+
+  const un = await installPs1(box, ['-Uninstall', '-Dir', box.dir]);
+  assert.equal(un.code, 0, un.stderr);
+  assert.ok(fs.existsSync(shim), 'uninstall deleted a prmpt.cmd it did not write');
+});
+
+test('-Uninstall takes our command away', { skip }, async () => {
+  const box = sandbox();
+  await installPs1(box, ['-Agents', 'claude', '-Dir', box.dir]);
+  assert.ok(fs.existsSync(shimPath(box)));
+
+  const un = await installPs1(box, ['-Uninstall', '-Dir', box.dir]);
+  assert.equal(un.code, 0, un.stderr);
+  assert.equal(fs.existsSync(shimPath(box)), false, 'the shim outlived the install it points at');
+});
+
+test('both installers put the command in the same place', { skip }, async () => {
+  // One machine can be installed both ways -- install.sh under Git Bash, then
+  // install.ps1, or the reverse. If they disagreed about the directory the
+  // second run would leave the first one's `prmpt` behind, pointing at a tree
+  // that may since have been replaced.
+  const a = sandbox();
+  const b = sandbox();
+  await install(a, ['--agents', 'claude', '--dir', a.dirArg]);
+  await installPs1(b, ['-Agents', 'claude', '-Dir', b.dir]);
+
+  assert.equal(
+    path.relative(a.home, path.join(a.home, '.local', 'bin', 'prmpt')),
+    path.relative(b.home, shimPath(b)).replace(/\.cmd$/, ''),
+    'the two installers disagree about where the command goes',
+  );
+  assert.ok(fs.existsSync(path.join(a.home, '.local', 'bin', 'prmpt')));
+  assert.ok(fs.existsSync(shimPath(b)));
+});
