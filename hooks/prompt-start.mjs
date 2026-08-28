@@ -4,8 +4,10 @@
 // Wired to Claude Code's `UserPromptSubmit`, which fires the instant the user
 // presses enter. It derives a handful of keywords from the prompt, hands them
 // to a detached child to match against, and exits. The child parks whatever
-// comes back in ~/.config/prmpt/slot-<session>.json, where hooks/status-line.mjs
-// picks it up and renders it in the footer while the model works.
+// comes back in ~/.config/prmpt/slot.json, where hooks/statusline.mjs picks it
+// up and renders it in the footer while the model works. That file has a second
+// filler -- the ad hooks/turn-end.mjs parks -- so a fetch that misses leaves the
+// last turn's ad on screen rather than blanking the row.
 //
 // Two rules govern this file, and both are absolute:
 //
