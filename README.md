@@ -34,7 +34,7 @@ hard 1.5s budget, and silence on anything that misses it.
 curl -fsSL https://prmpt.cash/install.sh | sh
 ```
 
-Zero runtime dependencies. Plain ESM. Node 18+. MIT.
+Zero runtime dependencies. Plain ESM. Node 18+. GPL-3.0-or-later.
 
 ---
 
@@ -610,4 +610,10 @@ can, and a copy taken beforehand keeps working until it expires.
 
 ## License
 
-MIT
+GNU General Public License v3.0 or later. The full text is in [LICENSE](LICENSE).
+
+Copyright (C) 2026 prmpt.cash
+
+Releases up to and including v0.3.0 were published under the MIT licence. That
+grant stands for those versions -- a licence already given cannot be withdrawn --
+so this change binds v0.3.1 onward.

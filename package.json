@@ -2,7 +2,7 @@
   "name": "prmpt",
   "version": "0.3.0",
   "description": "Get paid to use Claude Code, Codex, Gemini CLI, Amp and Cursor. A zero-dependency hook that earns you 70% of every sponsored line it shows, in USDC, BTC or ETH on Base, or SOL, TINY or XAUT on Solana.",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "repository": {
     "type": "git",
