@@ -76,6 +76,10 @@ usage: prmpt <command> [options]
                              Your keys stay here; the browser gets a two-minute
                              single-use code. Everything configurable -- payout
                              token, earnings, history -- lives there.
+  onboard                    Open the onboarding page: how this works, connect a
+                             GitHub or X account to lift the daily earnings cap,
+                             and pick which token you are paid in. Run it again
+                             any time -- the link from 'login' expires quickly.
 
   wallet                     Show both addresses (same as 'wallet show').
   wallet new [--force]       Generate a fresh seed phrase and both wallets.
@@ -416,6 +420,31 @@ function safeLoadWallet() {
  * move and is not exposed to the page.
  */
 async function cmdDashboard(args) {
+  return openWebSession(args, { opening: 'the dashboard' });
+}
+
+/**
+ * Open the onboarding page signed in as this install.
+ *
+ * Identical machinery to `dashboard`, different destination. It exists as its
+ * own command because the code lives two minutes: the link printed at the end
+ * of `prmpt login` is dead by the time somebody comes back to their terminal
+ * after lunch, and "run this to get a fresh one" has to be a thing they can
+ * actually run.
+ */
+async function cmdOnboard(args) {
+  return openWebSession(args, { next: '/onboarding', opening: 'onboarding' });
+}
+
+/**
+ * Mint a single-use code from the stored token and open the browser at it.
+ *
+ * `next` names a path on the site, never a full URL -- it is passed through the
+ * sign-in page, which validates it against its own allowlist before
+ * redirecting. Building an absolute URL here would put the destination outside
+ * anything the server checks.
+ */
+async function openWebSession(args, { next = '', opening = 'the dashboard' } = {}) {
   const stored = readStoredConfig();
   const envToken = (process.env.PRMPT_TOKEN || process.env.PRMPT_API_KEY || '').trim();
   const token = envToken || (typeof stored.token === 'string' ? stored.token.trim() : '');
@@ -425,19 +454,33 @@ async function cmdDashboard(args) {
 
   const endpoint = resolveEndpoint();
   const session = await createWebSession({ endpoint, token });
+  const url = webSessionURL(session.url, next);
 
-  out('prmpt: opening the dashboard.');
+  out(`prmpt: opening ${opening}.`);
   out('');
-  out(`  ${session.url}`);
+  out(`  ${url}`);
   out('');
   out('That link signs in as this install. It is single use and expires in two');
   out('minutes -- treat it like a password until you have opened it.');
 
   if (args.includes('--no-open')) return;
-  if (!openInBrowser(session.url)) {
+  if (!openInBrowser(url)) {
     out('');
     out('Could not open a browser here. Paste the link above into one.');
   }
+}
+
+/**
+ * Append a `next` path to a web session URL.
+ *
+ * Exported for the tests. The encoding matters: an unencoded path with a query
+ * string of its own would terminate this one early and the destination would
+ * be silently truncated.
+ */
+export function webSessionURL(base, next) {
+  if (!next) return base;
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}next=${encodeURIComponent(next)}`;
 }
 
 /**
@@ -593,6 +636,7 @@ export async function run(argv) {
     case 'wallet':     return cmdWallet(args);
     case 'dashboard':
     case 'web':        return cmdDashboard(args);
+    case 'onboard':    return cmdOnboard(args);
     case 'link-evm':   return cmdLinkEvm();
     case 'update':     return cmdUpdate(args);
     case 'help':
