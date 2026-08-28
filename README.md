@@ -458,6 +458,7 @@ otherwise runs the installer from a checkout.
 ```sh
 npm test           # the hook's own behaviour: fast, no network, no dependencies
 npm run test:smoke # installation: the installer against real agents, on this OS
+npm run test:e2e:linux # packaged VSIX through the real Linux VS Code CLI (CI supplies it)
 npm run test:all   # both
 ```
 
@@ -492,6 +493,16 @@ autodetection, `claude plugin validate --strict`, and the hook serving a real
 sponsored block through each host's documented payload. What CI cannot do is
 watch a hook fire inside a real session; that needs credentials, and the suite
 says so rather than implying otherwise.
+
+The Linux smoke workflow also builds the VS Code extension into its release
+VSIX and installs that exact file through the real VS Code CLI in an isolated
+extensions directory. This catches a package or manifest the editor refuses,
+without touching a developer's editor profile. Cursor uses the same VSIX; its
+private chat-bootstrap patch remains covered by the extension's compiled tests.
+It then parks a deterministic mock ad, launches a real VS Code Electron window
+under Xvfb, and checks the visible status-bar item, Sponsored sidebar card,
+Cursor composer-card script, and click forwarding. A screenshot is uploaded as
+the `linux-editor-ui` workflow artifact on every run.
 
 The smoke suite skips any agent that is not installed, so it is useful locally
 with only the agents you happen to have. In CI a skip is a failure.
