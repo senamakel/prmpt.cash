@@ -48,7 +48,7 @@ const STOPWORDS = new Set([
   'into', 'is', 'it', 'its', 'itself', 'just', 'let', 'lets', 'like', 'make', 'me', 'more',
   'most', 'my', 'myself', 'need', 'no', 'nor', 'not', 'now', 'of', 'off', 'ok', 'okay', 'on',
   'once', 'one', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over',
-  'own', 'please', 'put', 'же', 'same', 'she', 'should', 'so', 'some', 'still', 'such', 'sure',
+  'own', 'please', 'put', 'same', 'she', 'should', 'so', 'some', 'still', 'such', 'sure',
   'than', 'that', 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'these',
   'they', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 'us', 'use', 'very',
   'want', 'was', 'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom', 'why',
