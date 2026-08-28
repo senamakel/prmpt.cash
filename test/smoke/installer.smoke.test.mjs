@@ -167,9 +167,36 @@ function priorStatusLine(box, text) {
   return `"${process.execPath}" "${shellPath(file)}"`;
 }
 
+test('a default install wires no status line and no fetch hook', async () => {
+  // The point of the whole surface being opt-in. Claude Code hides most of its
+  // footer key hints -- "esc to interrupt" among them -- whenever ANY custom
+  // status line is set, so an installer that wired one up unasked would take a
+  // keybinding hint away from every install that ever upgrades.
+  const box = sandbox();
+  const res = await installAll(box);
+  assert.equal(res.code, 0, res.stderr);
+
+  const claude = readJSON(hostConfigPath(box, CLAUDE));
+  assert.equal(claude.statusLine, undefined, 'a default install wired a status line');
+  for (const { event } of CLAUDE.statusLineEvents) {
+    assert.equal(
+      ourEntries(claude, event).length,
+      0,
+      `a default install wired ${event}, which only feeds the status line`,
+    );
+  }
+
+  // The surface it DOES wire is untouched by any of this.
+  assert.equal(ourEntries(claude, CLAUDE.event).length, 1, 'the end-of-turn hook is not opt-in');
+
+  // And it says so, with the reason and the way to turn it on.
+  assert.match(res.stdout, /esc to interrupt/, 'the trade-off was not explained');
+  assert.match(res.stdout, /statusline install|--statusline/, 'no way to turn it on was offered');
+});
+
 test('the status line is wired up for Claude Code and for nobody else', async () => {
   const box = sandbox();
-  await install(box, ['--agents', ALL_AGENTS, '--dir', box.dirArg]);
+  await installAll(box, { statusLine: true });
 
   const claude = readJSON(hostConfigPath(box, CLAUDE));
   assert.equal(claude.statusLine?.type, 'command', 'no statusLine was recorded');
@@ -186,7 +213,7 @@ test('the status line is wired up for Claude Code and for nobody else', async ()
 
 test('the recorded status-line command runs and prints one line', async () => {
   const box = sandbox();
-  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   const { command } = readJSON(hostConfigPath(box, CLAUDE)).statusLine;
 
   const res = await runRecorded(command, {
@@ -208,7 +235,7 @@ test("an existing status line is wrapped, not replaced", async () => {
   const theirs = priorStatusLine(box, 'my-repo (main) 41% left');
   fs.writeFileSync(file, JSON.stringify({ statusLine: { type: 'command', command: theirs } }));
 
-  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   assert.equal(res.code, 0, res.stderr);
 
   const state = readJSON(path.join(box.home, ...STATUSLINE_STATE));
@@ -241,7 +268,7 @@ test('re-running the installer never wraps our own command', async () => {
   fs.writeFileSync(file, JSON.stringify({ statusLine: { type: 'command', command: theirs } }));
 
   for (let i = 0; i < 3; i++) {
-    const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+    const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
     assert.equal(res.code, 0, res.stderr);
   }
 
@@ -264,7 +291,7 @@ test('uninstall gives the status line back', async () => {
   const theirs = priorStatusLine(box, 'my-repo (main)');
   fs.writeFileSync(file, JSON.stringify({ model: 'opus', statusLine: { type: 'command', command: theirs } }));
 
-  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   assert.notEqual(
     readJSON(file).statusLine.command,
     theirs,
@@ -286,7 +313,7 @@ test('uninstall gives the status line back', async () => {
 
 test('uninstall removes a status line we added where there was none', async () => {
   const box = sandbox();
-  await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   const file = hostConfigPath(box, CLAUDE);
   assert.ok(readJSON(file).statusLine, 'nothing was installed to remove');
 
@@ -348,7 +375,7 @@ test('a config that was already there survives, backup and all', async () => {
   };
   fs.writeFileSync(file, JSON.stringify(before, null, 2));
 
-  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   assert.equal(res.code, 0, res.stderr);
 
   const after = readJSON(file);
@@ -381,7 +408,7 @@ test('a config written with a UTF-8 BOM is still merged into', async () => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `\uFEFF${JSON.stringify({ model: 'opus' })}`);
 
-  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg]);
+  const res = await install(box, ['--agents', 'claude', '--dir', box.dirArg, '--statusline']);
   assert.equal(res.code, 0, res.stderr);
 
   const after = fs.readFileSync(file, 'utf8');
