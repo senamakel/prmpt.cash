@@ -165,9 +165,16 @@ from somewhere else; the renderer reads that file and prints one row.
 
 ## How the money works
 
-**70% of the clearing price, on both events.** An advertiser bids a CPM and a CPC;
-the auction ranks on expected value and the winner pays what it cleared at. You get
-70% of that when the ad is shown, and 70% of the click price if it is clicked.
+**You are paid for being shown an ad, not for reacting to one.** That is the whole
+difference between this and every "monetize your audience" scheme: there is no
+action you have to take. An advertiser bids a CPM and a CPC, the auction ranks on
+expected value, and the winner pays what it cleared at. **70% of that is yours** when
+the ad is shown, and 70% of the click price on top if it is ever clicked.
+
+**How much, honestly:** one impression is worth a fraction of a cent, and a click is
+worth meaningfully more than one. This is beer money that arrives while you work,
+not an income — and the daily cap below says out loud where the ceiling is. We would
+rather you find that out here than after a month of watching a balance.
 
 **Impressions accrue; clicks settle immediately.** A single status-line impression
 is worth a fraction of a cent, and sending a fraction of a cent on-chain costs more
