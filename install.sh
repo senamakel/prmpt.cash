@@ -329,6 +329,7 @@ if [ "$ASSUME_YES" -eq 0 ] && [ -z "$AGENTS" ] && [ -t 1 ] && [ -r /dev/tty ]; t
     printf '  %sNumber to toggle%s, %sa%s all, %sn%s none, %sEnter%s to install, %sq%s to quit: ' \
       "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R" "$B" "$R"
     if ! IFS= read -r _reply < /dev/tty; then say ""; break; fi
+    say ""
     # Commas are what people type when a prompt shows a list; accept them.
     _reply=$(printf '%s' "$_reply" | tr ',' ' ')
     case "$_reply" in
@@ -375,8 +376,6 @@ fi
 # behaviour is unchanged: --editor means both, --no-editor means neither.
 : "${EDITOR_CURSOR:=${EDITOR_EXT:-}}"
 : "${EDITOR_CODE:=${EDITOR_EXT:-}}"
-
-say ""
 
 # Running from a checkout? Use it. Otherwise fetch.
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo "")
