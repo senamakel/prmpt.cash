@@ -303,10 +303,14 @@ export const STATUSLINE_STATE = ['.config', 'prmpt', 'statusline-chain-claude.js
  * that imported the value under test would agree with any bug.
  *
  * `event`/`timeout`/`matcher` describe the end-of-turn surface, which every
- * host has. `extraEvents` and `statusLine` describe the status-line surface,
+ * host has and which a default install wires up.
+ *
+ * `statusLineEvents` and `statusLine` describe the OPT-IN status-line surface,
  * which only Claude Code has: nothing else here has a footer that renders
  * while the model is working, so fabricating one for them would wire up a hook
- * that could never display anything.
+ * that could never display anything. Neither is written unless --statusline is
+ * passed -- Claude Code hides most of its footer key hints while any custom
+ * status line is set, and that is not a trade an installer makes for somebody.
  */
 export const HOSTS = [
   {
@@ -318,7 +322,7 @@ export const HOSTS = [
     timeout: 5,
     matcher: undefined,
     hook: 'turn-end.mjs',
-    extraEvents: [
+    statusLineEvents: [
       { event: 'UserPromptSubmit', timeout: 5, matcher: undefined, hook: 'prompt-start.mjs' },
     ],
     statusLine: 'statusline.mjs',
@@ -332,7 +336,7 @@ export const HOSTS = [
     timeout: 5,
     matcher: undefined,
     hook: 'turn-end.mjs',
-    extraEvents: [],
+    statusLineEvents: [],
     statusLine: null,
   },
   {
@@ -344,7 +348,7 @@ export const HOSTS = [
     timeout: 5000,
     matcher: '*',
     hook: 'turn-end.mjs',
-    extraEvents: [],
+    statusLineEvents: [],
     statusLine: null,
   },
 ];
