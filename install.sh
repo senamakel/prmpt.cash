@@ -344,7 +344,7 @@ fi
 # Gemini CLI have no equivalent footer, so inventing one for them would wire up
 # a hook that could never display anything.
 merge_hook() {
-  file="$1"; event="$2"; timeout="$3"; matcher="$4"; hookpath="$5"
+  file="$1"; event="$2"; timeout="$3"; matcher="$4"; hookpath="$5"; backup="${6:-1}"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   # Values reach the program through the ENVIRONMENT, never argv. install.ps1
@@ -353,7 +353,7 @@ merge_hook() {
   # every later argument shifted by one and the hook path went missing. The
   # environment preserves an empty value and needs no quoting on either side.
   PRMPT_CFG="$file" PRMPT_EVENT="$event" PRMPT_TIMEOUT="$timeout" \
-  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$hookpath" \
+  PRMPT_MATCHER="$matcher" PRMPT_HOOK="$hookpath" PRMPT_BACKUP="$backup" \
   "$NODE_BIN" -e '
     const fs=require("fs");
     const p=process.env.PRMPT_CFG, event=process.env.PRMPT_EVENT;
@@ -367,8 +367,12 @@ merge_hook() {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
     }
-    // Back up before the first modification, never after.
-    if (raw) fs.copyFileSync(p, p+".bak");
+    // Back up before the FIRST modification, never after. Claude Code takes
+    // three passes over one file -- two hooks and the status line -- and a
+    // backup per pass would leave a .bak of our own half-finished work rather
+    // than of what the user actually had. PRMPT_BACKUP=0 says somebody already
+    // took it this run; unset means take it, so a standalone run still does.
+    if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
 
     j.hooks = j.hooks || {};
     const groups = Array.isArray(j.hooks[event]) ? j.hooks[event] : [];
@@ -400,11 +404,11 @@ merge_hook() {
 # who will install this already have a status line they built, and silently
 # taking it away over an ad plugin is the fastest way to be uninstalled.
 merge_statusline() {
-  file="$1"; hookpath="$2"
+  file="$1"; hookpath="$2"; backup="${3:-1}"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   # Through the environment, never argv -- same reason as merge_hook.
-  PRMPT_CFG="$file" PRMPT_HOOK="$hookpath" PRMPT_STATE="$STATE_FILE" \
+  PRMPT_CFG="$file" PRMPT_HOOK="$hookpath" PRMPT_STATE="$STATE_FILE" PRMPT_BACKUP="$backup" \
   "$NODE_BIN" -e '
     const fs=require("fs"), path=require("path");
     const p=process.env.PRMPT_CFG, hook=process.env.PRMPT_HOOK, state=process.env.PRMPT_STATE;
@@ -414,7 +418,7 @@ merge_statusline() {
       try { j=JSON.parse(raw); }
       catch (e) { console.error("  unparseable JSON, leaving it alone: "+p); process.exit(3); }
     }
-    if (raw) fs.copyFileSync(p, p+".bak");
+    if (raw && process.env.PRMPT_BACKUP !== "0") fs.copyFileSync(p, p+".bak");
     const prev = (j.statusLine && typeof j.statusLine === "object") ? j.statusLine : {};
     const prevCmd = typeof prev.command === "string" ? prev.command : "";
     // Record theirs so our renderer can run it and uninstall can hand it back.
@@ -455,10 +459,10 @@ CONFIGURED=0
 if { [ -n "$AGENTS" ] && want claude; } || { [ -z "$AGENTS" ] && { detected claude || [ -d "$HOME/.claude" ]; }; }; then
   if merge_hook "$CLAUDE_CFG" "Stop" 5 "" "$HOOK"; then
     ok "Claude Code  $CLAUDE_CFG  ${D}(Stop)${R}"; CONFIGURED=$((CONFIGURED+1))
-    if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK"; then
+    if merge_hook "$CLAUDE_CFG" "UserPromptSubmit" 5 "" "$PROMPT_HOOK" 0; then
       ok "             ${D}+ UserPromptSubmit (fetches the status-line slot)${R}"
     fi
-    if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK"; then
+    if merge_statusline "$CLAUDE_CFG" "$STATUS_HOOK" 0; then
       if [ -f "$STATE_FILE" ]; then
         ok "             ${D}+ statusLine (wrapping the one you already had)${R}"
       else
