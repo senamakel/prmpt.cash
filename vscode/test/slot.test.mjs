@@ -9,6 +9,7 @@ import { test, before } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
@@ -93,14 +94,41 @@ test('a slot missing a headline or URL is refused', () => {
   assert.equal(slot.readSlot(), null);
 });
 
+/**
+ * A base port whose next `span` ports are all free right now.
+ *
+ * These tests used to hard-code 53111/53211/53311, which made them fail -- and,
+ * once a bridge fell through to a port it then could not claim, hang the whole
+ * file -- on any machine where something unrelated already held one of them.
+ * What is under test is the fallthrough, never a particular number.
+ */
+async function freeBase(span = 2) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const base = 49152 + Math.floor(Math.random() * 10000);
+    const bound = [];
+    let ok = true;
+    for (let i = 0; i < span && ok; i++) {
+      ok = await new Promise((resolve) => {
+        const s = net.createServer();
+        s.once('error', () => resolve(false));
+        s.listen(base + i, '127.0.0.1', () => { bound.push(s); resolve(true); });
+      });
+    }
+    await Promise.all(bound.map((s) => new Promise((r) => s.close(r))));
+    if (ok) return base;
+  }
+  throw new Error('no free port range');
+}
+
 // --- the bridge -------------------------------------------------------------
 
 test('the bridge binds loopback only, and never exposes the click URL', async () => {
   park();
   let opened = 0;
   const b = new bridge.Bridge(() => { opened++; });
-  const port = await b.start(53111);
-  assert.ok(port >= 53111, 'a port was claimed');
+  const base = await freeBase();
+  const port = await b.start(base);
+  assert.ok(port >= base, 'a port was claimed');
 
   const res = await fetch(`http://127.0.0.1:${port}/slot`);
   const body = await res.json();
@@ -135,7 +163,8 @@ test('the bridge binds loopback only, and never exposes the click URL', async ()
 test('the bridge serves null rather than failing when nothing is parked', async () => {
   park(null);
   const b = new bridge.Bridge(() => {});
-  const port = await b.start(53211);
+  const port = await b.start(await freeBase());
+  assert.ok(port > 0, 'a port was claimed');
   const res = await fetch(`http://127.0.0.1:${port}/slot`);
   assert.equal(res.status, 200);
   assert.equal(await res.json(), null);
@@ -145,11 +174,12 @@ test('the bridge serves null rather than failing when nothing is parked', async 
 test('a taken port falls through to the next in the range', async () => {
   park();
   const a = new bridge.Bridge(() => {});
-  const first = await a.start(53311);
+  const base = await freeBase(2);
+  const first = await a.start(base);
+  assert.equal(first, base, 'a free port is claimed as-is');
   const b = new bridge.Bridge(() => {});
-  const second = await b.start(53311);
-  assert.equal(first, 53311);
-  assert.equal(second, 53312, 'a second window must not fight the first for the port');
+  const second = await b.start(first);
+  assert.equal(second, first + 1, 'a second window must not fight the first for the port');
   a.dispose();
   b.dispose();
 });
